@@ -1,4 +1,5 @@
 import TYPES from "../types/index";
+import { bindActionCreators } from "redux";
 const INITITAL_STATE = {
   style: {
     container: {
@@ -42,14 +43,17 @@ const INITITAL_STATE = {
   currentStep: 0
 };
 
-export default (state = INITITAL_STATE, action) => {
+export default (state = { stepper: INITITAL_STATE }, action) => {
   switch (action.type) {
-    case TYPES.LABLE_TREE_VERIFY_TAB:
+    case TYPES.LABLES_VERIFY_TAB:
       return state;
-    case TYPES.LABLE_TREE_SELECT_TAB:
+    case TYPES.LABLES_SELECT_TAB:
       return state;
-    case TYPES.LABLE_TREE_GET_TREES:
-      return state;
+    case TYPES.LABLES_GET_TREES:
+      return {
+        ...state,
+        step0Data: action.payload
+      };
     default:
       return state;
   }

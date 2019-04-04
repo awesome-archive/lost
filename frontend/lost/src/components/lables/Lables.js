@@ -11,29 +11,36 @@ class LableTree extends Component {
     this.changeCurrentStep = this.changeCurrentStep.bind(this);
   }
 
-  componentDidMount() {}
+  componentDidMount() {
+    this.props.getTrees();
+  }
 
-  changeCurrentStep() {
-    // switch (this.props.pipelineRunning.currentStep) {
-    //   case 0:
-    //     return <SelectPipeline />;
-    //   case 1:
-    //     return <ShowRunningPipeline />;
-    // }
+  changeCurrentStep() {}
+
+  renderContent() {
+    switch (this.props.stepper.currentStep) {
+      case 0:
+        return <SelectLableTree data={this.props.step0Data} />;
+      case 1:
+        return <ShowLableTree />;
+    }
   }
 
   render() {
     return (
-      <Stepper
-        stepperData={this.props.lables}
-        changeCurrentStep={this.changeCurrentStep}
-      />
+      <div className="lables-container">
+        <Stepper
+          stepperData={this.props.stepper}
+          changeCurrentStep={this.changeCurrentStep}
+        />
+        {this.renderContent()}
+      </div>
     );
   }
 }
 
 const mapStateToProps = state => {
-  return { lables: state.lables };
+  return { stepper: state.lables.stepper, step0Data: state.lables.step0Data };
 };
 
 export default connect(

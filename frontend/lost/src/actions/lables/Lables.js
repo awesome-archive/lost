@@ -1,6 +1,7 @@
 import { API_URL } from "../../settings";
 import TYPES from "../../types/index";
 import axios from "axios";
+import { alertLoading, alertClose } from "rootComponents/Alerts";
 const verifyTab = (tabId, verified) => {
   return {
     type: TYPES.LABLES_VERIFY_TAB,
@@ -21,10 +22,22 @@ const selectTab = tabId => {
 };
 
 const getTrees = () => async dispatch => {
+  let response;
+  let error;
+  alertLoading();
   try {
-    const response = await axios.get(API_URL + "/label/tree");
-    dispatch({ type: TYPES.LABLES_GET_TREES, payload: response.data });
-  } catch (e) {}
+    response = await axios.get(API_URL + "/label/tree");
+  } catch (e) {
+    error = e;
+  }
+  alertClose();
+  dispatch({
+    type: TYPES.LABLES_GET_TREES,
+    payload: {
+      response: response.data,
+      error
+    }
+  });
 };
 
 export default { verifyTab, selectTab, getTrees };
