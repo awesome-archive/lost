@@ -1,37 +1,11 @@
-import React, { Component } from 'react'
-import { connect } from 'react-redux'
-import RunningPipeline from 'pipRoot/running/RunningPipeline'
-import {
-	Row,
-	Col,
-	Card,
-	CardBody,
-} from 'reactstrap'
+import React from "react";
+import RunningPipeline from "pipRoot/running/RunningPipeline";
+import AppContainer from "../AppContainer";
 
-
-class RunningPipe extends Component {
-	constructor(props){
-		super(props)
-		this.mount = React.createRef()
-	}
-	
-	componentDidMount(){
-
-	}
-	render(){
-		return (
-			<Row>
-				<Col xs='12' sm='12' lg='12'>
-                    <Card>
-                        <CardBody >
-							<RunningPipeline />
-                        </CardBody>
-                    </Card>
-                </Col>
-			</Row>
-		)
-	}
-}
-
-
-export default connect(null)(RunningPipe);
+export default () => {
+  return (
+    <AppContainer>
+      <RunningPipeline />
+    </AppContainer>
+  );
+};
