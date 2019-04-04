@@ -1,5 +1,4 @@
 import TYPES from "../types/index";
-import { bindActionCreators } from "redux";
 const INITITAL_STATE = {
   style: {
     container: {
@@ -45,14 +44,41 @@ const INITITAL_STATE = {
 
 export default (state = { stepper: INITITAL_STATE }, action) => {
   switch (action.type) {
-    case TYPES.LABLES_VERIFY_TAB:
-      return state;
-    case TYPES.LABLES_SELECT_TAB:
-      return state;
-    case TYPES.LABLES_GET_TREES:
+    case TYPES.LABELS_SELECT_TAB:
       return {
         ...state,
-        step0Data: action.payload
+        stepper: {
+          ...state.stepper,
+          currentStep: action.payload.tabId
+        }
+      };
+    case TYPES.LABELS_VERIFY_TAB:
+      return {
+        ...state,
+        stepper: {
+          ...state.stepper,
+          steps: state.stepper.steps.map((el, i) => {
+            if (i === action.payload.tabId) {
+              return {
+                ...el,
+                verified: action.payload.verified
+              };
+            }
+            return el;
+          })
+        }
+      };
+    case TYPES.LABELS_GET_TREES:
+      return {
+        ...state,
+        treeData: action.payload
+      };
+    case TYPES.LABELS_SELECT_TREE:
+      return {
+        ...state,
+        selectedTree: state.treeData.response.filter(
+          el => el.idx === action.payload.idx
+        )[0]
       };
     default:
       return state;

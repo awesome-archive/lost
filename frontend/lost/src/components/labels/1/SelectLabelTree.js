@@ -3,7 +3,7 @@ import actions from "actions";
 import { connect } from "react-redux";
 import ErrorMessage from "rootComponents/ErrorMessage";
 import ReactTable from "react-table";
-const { getTree } = actions;
+const { selectLabelTree, verifyTab, selectTab } = actions;
 var amountOfLabels = 0;
 class SelectLableTree extends Component {
   constructor() {
@@ -20,6 +20,11 @@ class SelectLableTree extends Component {
     return count;
   }
 
+  selectRow(idx) {
+    this.props.selectLabelTree(idx);
+    this.props.verifyTab(0, true);
+    this.props.selectTab(1);
+  }
   renderDatatable() {
     if (this.props.data) {
       if (this.props.data.error) {
@@ -50,7 +55,7 @@ class SelectLableTree extends Component {
             }
           ]}
           getTrProps={(state, rowInfo) => ({
-            onClick: () => console.log(rowInfo)
+            onClick: () => this.selectRow(rowInfo.original.idx)
           })}
           defaultSorted={[
             {
@@ -67,7 +72,7 @@ class SelectLableTree extends Component {
   }
 
   render() {
-    return <div className="lables-1">{this.renderDatatable()}</div>;
+    return <div className="labels-1">{this.renderDatatable()}</div>;
   }
 }
 
@@ -82,5 +87,5 @@ function getAmountOfLabels(n) {
 
 export default connect(
   null,
-  { getTree }
+  { selectLabelTree, verifyTab, selectTab }
 )(SelectLableTree);

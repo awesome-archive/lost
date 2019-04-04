@@ -1,10 +1,10 @@
 import React from "react";
-import Lables from "../components/lables/Lables";
+import Labels from "../components/labels/Labels";
 import AppContainer from "./AppContainer";
 export default () => {
   return (
     <AppContainer>
-      <Lables />
+      <Labels />
     </AppContainer>
   );
 };

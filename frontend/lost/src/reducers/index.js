@@ -1,7 +1,7 @@
 import { combineReducers } from "redux";
 import { reducer as formReducer } from "redux-form";
 import auth from "./auth";
-import lables from "./lables";
+import labels from "./labels";
 import group from "./group";
 import user from "./user";
 import annoTask from "./annoTask";
@@ -12,7 +12,7 @@ import pipelineStart from "./pipelineStart";
 
 export default combineReducers({
   auth,
-  lables,
+  labels,
   group,
   user,
   annoTask,

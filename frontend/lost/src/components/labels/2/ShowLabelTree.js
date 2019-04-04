@@ -5,8 +5,12 @@ class ShowLableTree extends Component {
     super();
   }
 
+  renderTree() {
+    return <div>TEST</div>;
+  }
+
   render() {
-    return <div>ShowLableTree</div>;
+    return <div>{this.renderTree()}</div>;
   }
 }
 

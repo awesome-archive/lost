@@ -4,7 +4,7 @@ import axios from "axios";
 import { alertLoading, alertClose } from "rootComponents/Alerts";
 const verifyTab = (tabId, verified) => {
   return {
-    type: TYPES.LABLES_VERIFY_TAB,
+    type: TYPES.LABELS_VERIFY_TAB,
     payload: {
       tabId,
       verified
@@ -14,7 +14,7 @@ const verifyTab = (tabId, verified) => {
 
 const selectTab = tabId => {
   return {
-    type: TYPES.LABLES_SELECT_TAB,
+    type: TYPES.LABELS_SELECT_TAB,
     payload: {
       tabId
     }
@@ -32,7 +32,7 @@ const getTrees = () => async dispatch => {
   }
   alertClose();
   dispatch({
-    type: TYPES.LABLES_GET_TREES,
+    type: TYPES.LABELS_GET_TREES,
     payload: {
       response: response.data,
       error
@@ -40,4 +40,13 @@ const getTrees = () => async dispatch => {
   });
 };
 
-export default { verifyTab, selectTab, getTrees };
+const selectLabelTree = idx => {
+  return {
+    type: TYPES.LABELS_SELECT_TREE,
+    payload: {
+      idx
+    }
+  };
+};
+
+export default { verifyTab, selectTab, getTrees, selectLabelTree };

@@ -1,5 +1,5 @@
 import * as auth from "./auth";
-import * as lable from "./lables";
+import * as labels from "./labels";
 import * as group from "./group";
 import * as user from "./user";
 import * as annoTask from "./annoTask";
@@ -9,7 +9,7 @@ import * as pipeline from "./pipeline";
 
 export default {
   ...auth,
-  ...lable,
+  ...labels,
   ...group,
   ...user,
   ...annoTask,

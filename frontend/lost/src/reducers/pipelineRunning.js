@@ -42,14 +42,7 @@ const INITITAL_STATE = {
 };
 export default (state = INITITAL_STATE, action) => {
   switch (action.type) {
-    case "PIPELINE_RUNNING_RESET":
-      return {
-        ...INITITAL_STATE
-      };
     case "PIPELINE_RUNNING_GET_PIPELINES":
-      console.log("--------action.payload----------------------------");
-      console.log(action.payload);
-      console.log("------------------------------------");
       return {
         ...state,
         step0Data: action.payload

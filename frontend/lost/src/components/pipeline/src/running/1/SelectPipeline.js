@@ -39,7 +39,6 @@ class SelectPipeline extends Component {
   selectRow(id) {
     this.props.verifyTab(0, true);
     this.props.selectTab(1);
-    this.props.reset();
     this.props.getPipeline(id);
   }
 
@@ -48,13 +47,6 @@ class SelectPipeline extends Component {
       if (this.props.data.error) {
         return <ErrorMessage message={this.props.data.error} />;
       }
-      // const test = this.props.data.response.pipes.map((el)=>{
-      //   return{
-      //     ...el,
-      //     date: new Date(el.date).toDateString()
-      //   }
-      // }
-      // )
       return (
         <ReactTable
           columns={[

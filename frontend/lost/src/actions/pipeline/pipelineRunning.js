@@ -125,13 +125,6 @@ const downloadImage = filePath => async dispatch => {
   return objectURL;
 };
 
-const reset = () => {
-  return {
-    type: "PIPELINE_RUNNNING_RESET",
-    payload: null
-  };
-};
-
 const toggleModal = id => {
   return {
     type: "PIPELINE_RUNNING_TOGGLE_MODAL",
@@ -147,7 +140,6 @@ export default {
   getPipelines,
   getPipeline,
   toggleModal,
-  reset,
   deletePipeline,
   pausePipeline,
   playPipeline,
