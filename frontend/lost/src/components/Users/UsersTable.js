@@ -27,6 +27,7 @@ class UsersTable extends Component {
             Cell: row => {
               return (
                 <Button
+                  size="sm"
                   color="secondary"
                   onClick={() => this.props.onClickEditUser(row.original)}
                 >
@@ -34,12 +35,6 @@ class UsersTable extends Component {
                 </Button>
               );
             }
-          }
-        ]}
-        defaultSorted={[
-          {
-            id: "date",
-            desc: false
           }
         ]}
         data={this.props.users}
