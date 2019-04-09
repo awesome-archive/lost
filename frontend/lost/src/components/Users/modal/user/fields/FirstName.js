@@ -6,15 +6,15 @@ export default props => {
   return (
     <FormGroup row>
       <Col md="3">
-        <Label htmlFor={`editUser-firstName`}>First Name</Label>
+        <Label htmlFor={`users-firstName`}>First Name</Label>
       </Col>
       <Col xs="12" md="9">
         <Input
           defaultValue={value}
           onChange={onChange}
           type="firstName"
-          id={`editUser-firstName`}
-          name={`editUser-firstName`}
+          id={`users-firstName`}
+          name={`users-firstName`}
           placeholder={`Enter firstName...`}
         />
       </Col>

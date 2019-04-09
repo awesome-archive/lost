@@ -3,8 +3,6 @@ import Select from "react-select";
 import _ from "lodash";
 import { FormGroup, Col, Input, FormText, Label } from "reactstrap";
 
-const allowed = ["idx", "label"];
-
 class Groups extends Component {
   constructor() {
     super();

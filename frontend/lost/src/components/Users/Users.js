@@ -1,18 +1,21 @@
 import React, { Component } from "react";
 import { connect } from "react-redux";
 import actions from "actions";
-import EditUserModal from "./modal/editUser/UserModal";
+import UserModal from "./modal/user/UserModal";
 import UserTable from "./UsersTable";
 import { Button } from "reactstrap";
-const { getUsers, updateUser, getGroups } = actions;
+const { getUsers, updateUser, getGroups, createUser } = actions;
 
 class Users extends Component {
   constructor() {
     super();
     this.onClickEditUser = this.onClickEditUser.bind(this);
     this.modalOnClose = this.modalOnClose.bind(this);
+    this.onClickEditUser = this.onClickEditUser.bind(this);
+    this.onClickNewUser = this.onClickNewUser.bind(this);
     this.state = {
-      modalIsOpen: false
+      modalIsOpen: false,
+      newUser: undefined
     };
   }
 
@@ -23,15 +26,37 @@ class Users extends Component {
   onClickEditUser(row) {
     this.setState({
       selectedUser: row,
-      modalIsOpen: true
+      modalIsOpen: true,
+      newUser: false
     });
   }
 
-  async modalOnClose(updatedUser) {
+  onClickNewUser() {
+    this.setState({
+      modalIsOpen: true,
+      newUser: true
+    });
+  }
+
+  async modalOnClose(payload, user) {
     this.setState({
       modalIsOpen: false
     });
-    await this.props.updateUser(updatedUser);
+    switch (payload) {
+      case "cancel":
+        break;
+      case "newUser":
+        console.log("-----------------user-------------------");
+        console.log(user);
+        console.log("------------------------------------");
+        await this.props.createUser(user);
+        break;
+      case "updateUser":
+        await this.props.updateUser(user);
+        break;
+      default:
+        throw new Error("no payload");
+    }
     await this.props.getUsers();
     await this.props.getGroups();
   }
@@ -40,18 +65,19 @@ class Users extends Component {
     return (
       <>
         <h3>Users</h3>
-        <Button size="lg" color="primary">
+        <Button onClick={this.onClickNewUser} size="lg" color="primary">
           Add new User
         </Button>
         <UserTable
           users={this.props.users}
           onClickEditUser={this.onClickEditUser}
         />
-        <EditUserModal
+        <UserModal
           isOpen={this.state.modalIsOpen}
           modalOnClose={this.modalOnClose}
           user={this.state.selectedUser}
           allgroups={this.props.allgroups}
+          newUser={this.state.newUser}
         />
       </>
     );
@@ -67,5 +93,5 @@ function mapStateToProps(state) {
 
 export default connect(
   mapStateToProps,
-  { getUsers, updateUser, getGroups }
+  { getUsers, updateUser, getGroups, createUser }
 )(Users);

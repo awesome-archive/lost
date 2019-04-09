@@ -11,12 +11,12 @@ import {
 } from "reactstrap";
 import _ from "lodash";
 
-import Email from "../fields/Email";
-import FirstName from "../fields/FirstName";
-import Groups from "../fields/Groups";
-import LastName from "../fields/LastName";
-import Password from "../fields/Password";
-import Roles from "../fields/Roles";
+import Email from "./fields/Email";
+import FirstName from "./fields/FirstName";
+import Groups from "./fields/Groups";
+import LastName from "./fields/LastName";
+import Password from "./fields/Password";
+import Roles from "./fields/Roles";
 
 const allowed = [
   "email",
