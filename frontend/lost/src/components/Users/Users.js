@@ -3,9 +3,8 @@ import { connect } from "react-redux";
 import actions from "actions";
 import EditUserModal from "./modal/editUser/UserModal";
 import UserTable from "./UsersTable";
-import GroupsTable from "./GroupsTable";
-import { Button, Col, Container, Row } from "reactstrap";
-const { getUsers, getGroups } = actions;
+import { Button } from "reactstrap";
+const { getUsers } = actions;
 
 class Users extends Component {
   constructor() {
@@ -19,7 +18,6 @@ class Users extends Component {
 
   componentDidMount() {
     this.props.getUsers();
-    this.props.getGroups();
   }
 
   onClickEditUser(row) {
@@ -37,47 +35,32 @@ class Users extends Component {
 
   render() {
     return (
-      <Container>
-        <Row>
-          <Col xs="5">
-            <h3>Groups</h3>
-            <Button size="lg" color="primary">
-              Add new Group
-            </Button>
-            <GroupsTable groups={this.props.groups} />
-          </Col>
-          <Col xs="7">
-            <h3>Users</h3>
-            <Button size="lg" color="primary">
-              Add new User
-            </Button>
-            <UserTable
-              users={this.props.users}
-              onClickEditUser={this.onClickEditUser}
-            />
-            <EditUserModal
-              isOpen={this.state.modalIsOpen}
-              modalOnClose={this.modalOnClose}
-              user={this.state.selectedUser}
-            />
-          </Col>
-        </Row>
-      </Container>
+      <>
+        <h3>Users</h3>
+        <Button size="lg" color="primary">
+          Add new User
+        </Button>
+        <UserTable
+          users={this.props.users}
+          onClickEditUser={this.onClickEditUser}
+        />
+        <EditUserModal
+          isOpen={this.state.modalIsOpen}
+          modalOnClose={this.modalOnClose}
+          user={this.state.selectedUser}
+        />
+      </>
     );
   }
 }
 
 function mapStateToProps(state) {
-  console.log("----------state--------------------------");
-  console.log(state);
-  console.log("------------------------------------");
   return {
-    users: state.user.users,
-    groups: state.group.groups
+    users: state.user.users
   };
 }
 
 export default connect(
   mapStateToProps,
-  { getUsers, getGroups }
+  { getUsers }
 )(Users);
