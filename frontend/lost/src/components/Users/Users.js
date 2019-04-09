@@ -4,7 +4,7 @@ import actions from "actions";
 import EditUserModal from "./modal/editUser/UserModal";
 import UserTable from "./UsersTable";
 import { Button } from "reactstrap";
-const { getUsers } = actions;
+const { getUsers, updateUser, getGroups } = actions;
 
 class Users extends Component {
   constructor() {
@@ -27,10 +27,13 @@ class Users extends Component {
     });
   }
 
-  modalOnClose(idx, updatedUser) {
+  async modalOnClose(updatedUser) {
     this.setState({
       modalIsOpen: false
     });
+    await this.props.updateUser(updatedUser);
+    await this.props.getUsers();
+    await this.props.getGroups();
   }
 
   render() {
@@ -48,6 +51,7 @@ class Users extends Component {
           isOpen={this.state.modalIsOpen}
           modalOnClose={this.modalOnClose}
           user={this.state.selectedUser}
+          allgroups={this.props.allgroups}
         />
       </>
     );
@@ -56,11 +60,12 @@ class Users extends Component {
 
 function mapStateToProps(state) {
   return {
-    users: state.user.users
+    users: state.user.users,
+    allgroups: state.group.groups
   };
 }
 
 export default connect(
   mapStateToProps,
-  { getUsers }
+  { getUsers, updateUser, getGroups }
 )(Users);
