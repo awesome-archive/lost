@@ -31,6 +31,9 @@ class NewGroupModal extends Component {
   }
 
   modalOnClose() {
+    this.setState({
+      newGroupName: ""
+    });
     this.props.modalOnClose(this.state.newGroupName);
   }
 

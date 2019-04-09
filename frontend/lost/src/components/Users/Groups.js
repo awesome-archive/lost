@@ -5,7 +5,7 @@ import { Button } from "reactstrap";
 import NewGroupModal from "./modal/newGroup/NewGroupModal";
 
 import actions from "actions";
-const { getGroups, createGroup } = actions;
+const { getGroups, createGroup, deleteGroup } = actions;
 class Groups extends Component {
   constructor() {
     super();
@@ -14,6 +14,7 @@ class Groups extends Component {
     };
     this.newGroupOnClick = this.newGroupOnClick.bind(this);
     this.modalOnClose = this.modalOnClose.bind(this);
+    this.onDelete = this.onDelete.bind(this);
   }
 
   componentDidMount() {
@@ -27,13 +28,21 @@ class Groups extends Component {
   }
 
   modalOnClose(newGroupName) {
-    this.setState({
-      modalIsOpen: false
-    });
-    this.props.createGroup({
-      group_name: newGroupName
-    });
+    if (newGroupName) {
+      this.setState({
+        modalIsOpen: false
+      });
+      this.props.createGroup({
+        group_name: newGroupName
+      });
+    }
+
     this.props.getGroups();
+  }
+
+  async onDelete(groupIdx) {
+    await this.props.deleteGroup(groupIdx);
+    await this.props.getGroups();
   }
 
   render() {
@@ -43,7 +52,7 @@ class Groups extends Component {
         <Button onClick={this.newGroupOnClick} size="lg" color="primary">
           Add new Group
         </Button>
-        <GroupsTable groups={this.props.groups} />
+        <GroupsTable groups={this.props.groups} onDelete={this.onDelete} />
         <NewGroupModal
           isOpen={this.state.modalIsOpen}
           modalOnClose={this.modalOnClose}
@@ -59,5 +68,5 @@ function mapStateToProps(state) {
 }
 export default connect(
   mapStateToProps,
-  { getGroups, createGroup }
+  { getGroups, createGroup, deleteGroup }
 )(Groups);
