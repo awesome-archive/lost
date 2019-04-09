@@ -39,7 +39,6 @@ class UserModal extends Component {
             size="lg"
             isOpen={this.props.isOpen}
             toggle={this.props.modalOnClose}
-            className={this.props.className}
           >
             <ModalHeader>Edit User</ModalHeader>
             <ModalBody>

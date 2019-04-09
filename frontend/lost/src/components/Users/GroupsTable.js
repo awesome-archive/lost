@@ -6,9 +6,6 @@ class GroupsTable extends Component {
   }
 
   render() {
-    console.log("---------xxxxxxxxxxxx---------------------------");
-    console.log(this.props);
-    console.log("------------------------------------");
     return (
       <ReactTable
         columns={[
