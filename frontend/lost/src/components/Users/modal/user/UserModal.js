@@ -25,7 +25,6 @@ class UserModal extends Component {
 
     this.modalOnClose = this.modalOnClose.bind(this);
     this.updateUser = this.updateUser.bind(this);
-    this.renderCancelButton = this.renderCancelButton.bind(this);
   }
 
   //ComponentWillReciveProps is deprecated
@@ -37,21 +36,9 @@ class UserModal extends Component {
         (_.isEmpty(state.user) || props.user.idx !== state.user.idx) &&
         props.user
       ) {
-        const user = {
+        return {
           ...props.user,
           groups: props.user.groups.map(el => el.name)
-        };
-        return {
-          // use only allowed keys from object
-          user: _.pick(user, [
-            "email",
-            "first_name",
-            "groups",
-            "idx",
-            "last_name",
-            "password",
-            "roles"
-          ])
         };
       } else {
         return null;
@@ -65,29 +52,28 @@ class UserModal extends Component {
     this.setState({ user });
   }
 
-  modalOnClose(payload) {
-    console.log("------------------------------------");
-    console.log(payload);
-    console.log("------------------------------------");
-    let option = payload;
-    if (!option) {
-      if (this.props.newUser) {
-        option = "newUser";
-      } else {
-        option = "updateUser";
-      }
+  modalOnClose(option) {
+    if (option === "cancel") {
+      this.props.modalOnClose(option)
     }
-    const user = this.state.user;
+    if (this.props.newUser) {
+      option = "newUser";
+    } else {
+      option = "updateUser";
+    }
 
+    const user = this.state.user;
+    console.log("----------------user--------------------");
+    console.log(user);
+    console.log("------------------------------------");
+
+    // Create/Update User
     if (user.user_name && user.email && user.new_password) {
       this.props.modalOnClose(option, user);
     }
   }
 
   renderForm() {
-    console.log("---------jhjhj---------------------------");
-    console.log(this.state);
-    console.log("------------------------------------");
     if (this.props.newUser) {
       return (
         <NewUserForm
@@ -109,22 +95,17 @@ class UserModal extends Component {
     }
   }
 
-  renderCancelButton() {
-    return (
-      <Button color="secondary" onClick={() => this.modalOnClose("cancel")}>
-        Cancel
-      </Button>
-    );
-  }
 
   render() {
+    console.log("ZZZZZZZz")
+    console.log(this.state.user)
     if (this.state.user) {
       return (
         <div>
           <Modal
             size="lg"
             isOpen={this.props.isOpen}
-            toggle={() => this.modalOnClose()}
+            toggle={() => this.modalOnClose("cancel")}
           >
             <ModalHeader>Edit User</ModalHeader>
             <ModalBody>
@@ -135,7 +116,9 @@ class UserModal extends Component {
               </Card>
             </ModalBody>
             <ModalFooter>
-              {this.renderCancelButton()}
+              <Button color="secondary" onClick={() => this.modalOnClose("cancel")}>
+                Cancel
+              </Button>
               <Button color="secondary" onClick={() => this.modalOnClose()}>
                 Save
               </Button>

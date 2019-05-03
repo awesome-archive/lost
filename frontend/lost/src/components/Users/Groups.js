@@ -2,7 +2,7 @@ import React, { Component } from "react";
 import GroupsTable from "./GroupsTable";
 import { connect } from "react-redux";
 import { Button } from "reactstrap";
-import NewGroupModal from "./modal/newGroup/NewGroupModal";
+import NewGroupModal from "./modal/group/NewGroupModal";
 
 import actions from "actions";
 const { getGroups, createGroup, deleteGroup } = actions;
