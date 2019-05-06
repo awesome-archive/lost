@@ -38,25 +38,10 @@ class Users extends Component {
     });
   }
 
-  async modalOnClose(payload, user) {
+  async modalOnClose() {
     this.setState({
       modalIsOpen: false
     });
-    switch (payload) {
-      case "cancel":
-        break;
-      case "newUser":
-        console.log("-----------------user-------------------");
-        console.log(user);
-        console.log("------------------------------------");
-        await this.props.createUser(user);
-        break;
-      case "updateUser":
-        await this.props.updateUser(user);
-        break;
-      default:
-        throw new Error("no payload");
-    }
     await this.props.getUsers();
     await this.props.getGroups();
   }
@@ -78,6 +63,8 @@ class Users extends Component {
           user={this.state.selectedUser}
           allgroups={this.props.allgroups}
           newUser={this.state.newUser}
+          createUser={this.props.createUser}
+          updateUser={this.props.updateUser}
         />
       </>
     );

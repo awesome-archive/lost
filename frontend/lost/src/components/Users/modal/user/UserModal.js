@@ -19,7 +19,7 @@ class UserModal extends Component {
     this.state = {
       user: {
         groups: [],
-        roles: []
+        roles: ['Designer', 'Annotator']
       }
     };
 
@@ -49,27 +49,37 @@ class UserModal extends Component {
   }
 
   updateUser(user) {
-    this.setState({ user });
+    if(user.email && user.user_name && user.new_password){
+      this.setState(
+        {
+          validated: true,
+          user: user
+        }
+      )
+    }else {
+      this.setState(
+        {
+          validated: false,
+          user: user
+        }
+      )
+    }
   }
 
   modalOnClose(option) {
     if (option === "cancel") {
-      this.props.modalOnClose(option)
+      this.props.modalOnClose()
     }
     if (this.props.newUser) {
-      option = "newUser";
+      // {"user_name":"aaaa","password":"aaaa","email":"aaaa","groups":[],"roles":["Annotater"]}
     } else {
-      option = "updateUser";
+      // {"idx":6,"email":"ooo","first_name":"aaaaa","last_name":"aaaa","groups":[],"roles":["Annotator","Designer"],"password":"wwwwww"}
     }
-
     const user = this.state.user;
-    console.log("----------------user--------------------");
-    console.log(user);
-    console.log("------------------------------------");
-
     // Create/Update User
-    if (user.user_name && user.email && user.new_password) {
-      this.props.modalOnClose(option, user);
+    if (user.user_name && user.email && user.password) {
+      this.props.createUser(user)
+      this.props.modalOnClose();
     }
   }
 
@@ -97,8 +107,6 @@ class UserModal extends Component {
 
 
   render() {
-    console.log("ZZZZZZZz")
-    console.log(this.state.user)
     if (this.state.user) {
       return (
         <div>
@@ -107,7 +115,7 @@ class UserModal extends Component {
             isOpen={this.props.isOpen}
             toggle={() => this.modalOnClose("cancel")}
           >
-            <ModalHeader>Edit User</ModalHeader>
+            <ModalHeader>{this.props.newUser?'Add new user':'Edit User'}</ModalHeader>
             <ModalBody>
               <Card>
                 <CardBody>
