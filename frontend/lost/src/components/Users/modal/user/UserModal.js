@@ -49,14 +49,14 @@ class UserModal extends Component {
   }
 
   updateUser(user) {
-    if(user.email && user.user_name && user.new_password){
+    if (user.email && user.user_name && user.new_password) {
       this.setState(
         {
           validated: true,
           user: user
         }
       )
-    }else {
+    } else {
       this.setState(
         {
           validated: false,
@@ -66,78 +66,79 @@ class UserModal extends Component {
     }
   }
 
-  modalOnClose(option) {
-    if (option === "cancel") {
-      this.props.modalOnClose()
-    }
-    if (this.props.newUser) {
-      // {"user_name":"aaaa","password":"aaaa","email":"aaaa","groups":[],"roles":["Annotater"]}
-    } else {
-      // {"idx":6,"email":"ooo","first_name":"aaaaa","last_name":"aaaa","groups":[],"roles":["Annotator","Designer"],"password":"wwwwww"}
-    }
+  modalOnClose() {
     const user = this.state.user;
-    // Create/Update User
     if (user.user_name && user.email && user.password) {
-      this.props.createUser(user)
       this.props.modalOnClose();
+      if (this.props.newUser) {
+        // {"user_name":"nnnnn","password":"nnnnnn","email":"nnnnnnn","groups":[],"roles":[]}
+        this.props.createUser(user)      
+      } else {
+        // {"idx":6,"email":"ooo","first_name":"aaaaa","last_name":"aaaa","groups":[],"roles":["Annotator","Designer"],"password":"wwwwww"}
+        this.props.updateUser(user)
+      }
     }
+
+    // Create/Update User
+    
   }
+}
 
-  renderForm() {
-    if (this.props.newUser) {
-      return (
-        <NewUserForm
-          updateUser={this.updateUser}
-          user={this.state.user}
-          allgroups={this.props.allgroups}
-          usergroups={this.state.user.groups}
-        />
-      );
-    } else {
-      return (
-        <EditUserForm
-          updateUser={this.updateUser}
-          user={this.state.user}
-          allgroups={this.props.allgroups}
-          usergroups={this.state.user.groups}
-        />
-      );
-    }
+renderForm() {
+  if (this.props.newUser) {
+    return (
+      <NewUserForm
+        updateUser={this.updateUser}
+        user={this.state.user}
+        allgroups={this.props.allgroups}
+        usergroups={this.state.user.groups}
+      />
+    );
+  } else {
+    return (
+      <EditUserForm
+        updateUser={this.updateUser}
+        user={this.state.user}
+        allgroups={this.props.allgroups}
+        usergroups={this.state.user.groups}
+      />
+    );
   }
+}
 
 
-  render() {
-    if (this.state.user) {
-      return (
-        <div>
-          <Modal
-            size="lg"
-            isOpen={this.props.isOpen}
-            toggle={() => this.modalOnClose("cancel")}
-          >
-            <ModalHeader>{this.props.newUser?'Add new user':'Edit User'}</ModalHeader>
-            <ModalBody>
-              <Card>
-                <CardBody>
-                  <Form className="form-horizontal">{this.renderForm()}</Form>
-                </CardBody>
-              </Card>
-            </ModalBody>
-            <ModalFooter>
-              <Button color="secondary" onClick={() => this.modalOnClose("cancel")}>
-                Cancel
+render() {
+  if (this.state.user) {
+    return (
+      <div>
+        <Modal
+          size="lg"
+          isOpen={this.props.isOpen}
+          toggle={() => this.modalOnClose("cancel")}
+        >
+          <ModalHeader>{this.props.newUser ? 'Add new user' : 'Edit User'}</ModalHeader>
+          <ModalBody>
+            <Card>
+              <CardBody>
+                <Form className="form-horizontal">{this.renderForm()}</Form>
+              </CardBody>
+            </Card>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="secondary" onClick={() => this.modalOnClose()}>
+              Cancel
               </Button>
-              <Button color="secondary" onClick={() => this.modalOnClose()}>
-                Save
+            <Button color="secondary" onClick={() => this.modalOnClose()}>
+              Save
               </Button>
-            </ModalFooter>
-          </Modal>
-        </div>
-      );
-    } else {
-      return <div />;
-    }
+          </ModalFooter>
+        </Modal>
+      </div>
+    );
+  } else {
+    return <div />;
   }
+}
 }
 
 export default UserModal;
