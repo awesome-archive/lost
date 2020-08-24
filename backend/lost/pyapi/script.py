@@ -138,7 +138,7 @@ class Script(pe_base.Element):
                 it will be returned. Otherwise None
                 will be returned'''
         root_list = self._dbm.get_all_label_trees()
-        root = next(filter(lambda x: x==name, root_list), None)
+        root = next(filter(lambda x: x.name==name, root_list), None)
         if root is None:
             return None
         else:
@@ -207,7 +207,7 @@ class Script(pe_base.Element):
 
         Args:
             file_name (str): Name or relative path for a file.
-            context (str): Options: *instance*, *pipe*, *static*:
+            context (str): Options: *instance*, *pipe*, *static*
             ptype (str): Type of this path. Can be relative or absolute
                 Options: *abs*, *rel*
 
