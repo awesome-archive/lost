@@ -1,28 +1,23 @@
-image: docker:18.06
+image: docker:20.10.17
 services:
-- docker:dind
+  - docker:20.10.17-dind
 
 stages:
 - build-lost-base
-- build-lost-gpu-base
 - build-lost
 - test-lost
-- build-lost-cv
-- build-lost-cv-gpu
 - release-lost
 
 variables:
-  LOST_CI_REGISTRY_BASE_IMAGE: $CI_REGISTRY_BASE_IMAGE:0.0
+  LOST_CI_REGISTRY_BASE_IMAGE: $CI_REGISTRY_BASE_IMAGE:3.13
   LOST_CI_REGISTRY_GPU_BASE_IMAGE: $CI_REGISTRY_GPU_BASE_IMAGE:0.0
   LOST_CI_REGISTRY_TEST_IMAGE: $CI_REGISTRY_TEST_IMAGE:$CI_PIPELINE_ID
   LOST_CI_REGISTRY_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-  LOST_CI_REGISTRY_LOST_CV_IMAGE: $CI_REGISTRY_LOST_CV_IMAGE:$CI_COMMIT_TAG
   LOST_CI_REGISTRY_LOST_CV_GPU_IMAGE: $CI_REGISTRY_LOST_CV_GPU_IMAGE:$CI_COMMIT_TAG
   LOST_VERSION: $CI_PIPELINE_ID
 
-  
 before_script:
-  - apk add --update nodejs=10.14.2-r0 npm
+  - apk add --update nodejs npm
   - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
 
 build-lost-base:
@@ -33,34 +28,12 @@ build-lost-base:
   only: 
     variables:
       - $CI_COMMIT_MESSAGE =~ /lost-base/
-    
-build-lost-gpu-base:
-  stage: build-lost-gpu-base
-  script:
-    - docker build -t $LOST_CI_REGISTRY_GPU_BASE_IMAGE -f docker/lost-gpu-base/Dockerfile .
-    - docker push $LOST_CI_REGISTRY_GPU_BASE_IMAGE
-  only: 
-    variables:
-      - $CI_COMMIT_MESSAGE =~ /lost-gpu-base/
       
 build-lost:
   stage: build-lost
   script:
-    - npm install --prefix frontend/lost/src/tools/sia -d 
-    - npm install --prefix frontend/lost/src/components/pipeline -d
-    - npm install --prefix frontend/lost -d 
-    - CI=false npm run build --prefix frontend/lost -d 
-    - rm -rf frontend/lost/node_modules
-    - rm -rf frontend/lost/src/tools/sia/node_modules
-    - rm -rf frontend/lost/src/components/pipeline/node_modules
-    - docker build --build-arg base_image=$LOST_CI_REGISTRY_BASE_IMAGE --pull -t $LOST_CI_REGISTRY_TEST_IMAGE -f docker/lost/Dockerfile .
-    - docker push $LOST_CI_REGISTRY_TEST_IMAGE
-  except: 
-    variables:
-      - $CI_COMMIT_MESSAGE =~ /lost-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-gpu-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv-gpu/
+    - docker build --build-arg LOST_VERSION=${CI_COMMIT_TAG} --build-arg base_image=$LOST_CI_REGISTRY_BASE_IMAGE --pull -t $LOST_CI_REGISTRY_TEST_IMAGE -f docker/lost/Dockerfile .
+    - docker push $LOST_CI_REGISTRY_TEST_IMAGE  
 
 test-lost:
   stage: test-lost
@@ -69,33 +42,7 @@ test-lost:
     - pip install --quiet docker-compose~=1.23.0
   script:
     - cd docker/compose && docker-compose run -e LOST_VERSION=$LOST_VERSION lost bash /pytest.sh
-  except: 
-    variables:
-      - $CI_COMMIT_MESSAGE =~ /lost-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-gpu-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv-gpu/
-      
-build-lost-cv:
-  stage: build-lost-cv
-  script: 
-    - docker build --build-arg base_image=$LOST_CI_REGISTRY_BASE_IMAGE --pull -t $LOST_CI_REGISTRY_LOST_CV_IMAGE -f docker/executors/lost-cv/Dockerfile .
-    - docker push $LOST_CI_REGISTRY_LOST_CV_IMAGE
-  only:
-    # variables:
-    #   - $CI_COMMIT_MESSAGE =~ /lost-cv/
-    - tags
-
-build-lost-cv-gpu:
-  stage: build-lost-cv-gpu
-  script: 
-    - docker build --build-arg base_image=$LOST_CI_REGISTRY_GPU_BASE_IMAGE --pull -t $LOST_CI_REGISTRY_LOST_CV_GPU_IMAGE -f docker/executors/lost-cv-gpu/Dockerfile .
-    - docker push $LOST_CI_REGISTRY_LOST_CV_GPU_IMAGE
-  only:
-    # variables:
-    #   - $CI_COMMIT_MESSAGE =~ /lost-cv/
-    - tags
-
+ 
 release-lost:
   stage: release-lost
   script:
@@ -104,9 +51,3 @@ release-lost:
     - docker push $LOST_CI_REGISTRY_IMAGE
   only:
     - tags
-  except: 
-    variables:
-      - $CI_COMMIT_MESSAGE =~ /lost-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-gpu-base/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv/
-      - $CI_COMMIT_MESSAGE =~ /lost-cv-gpu/

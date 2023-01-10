@@ -1,7 +1,6 @@
 import axios from 'axios'
 import TYPES from '../../types/index'
-import {API_URL} from '../../settings'
-import {http} from 'l3p-frontend'
+import {API_URL} from '../../lost_settings'
 
 axios.defaults.headers.common['Authorization'] = 'Bearer ' + localStorage.getItem('token')
 
@@ -12,14 +11,25 @@ export const getMiaAnnos = (maxAmount) => async dispatch => {
     } catch (e) {console.log(e)}
 }
 
-export const getMiaImage = (path) => async dispatch =>{
-  
-        const config = {
-            url: API_URL +'/'+ path,
-            type: 'image',
-            token: localStorage.getItem('token')
-        }
-        return await http.get(config)
+export const getSpecialMiaAnnos = (miaIds, getWorkingAnnoTask) => async dispatch => {
+    try {
+        const response = await axios.post(API_URL + '/mia/special', miaIds)
+        dispatch({type: TYPES.GET_MIA_ANNOS, payload: response.data})
+        getWorkingAnnoTask()
+    } catch (e) {console.log(e)}
+}
+
+export const getMiaImage = (img) => async dispatch =>{
+    try {
+        const response = await axios.post(API_URL + '/data/getImage', img)
+        return response
+    } catch (e) {console.error(e)}
+        // const config = {
+        //     url: API_URL +'/'+ path,
+        //     type: 'image',
+        //     token: localStorage.getItem('token')
+        // }
+        // return await http.get(config)
 }
 
 export const miaZoomIn = (zoom) => dispatch =>{
@@ -62,7 +72,7 @@ export const setMiaSelectedLabel = (label) => dispatch => {
 
 export const updateMia = (data, getMiaAnnos, getWorkingAnnoTask, maxAmount) => async dispatch => {
     try {
-        const response = await axios.post(API_URL + '/mia/update', data)
+        await axios.post(API_URL + '/mia/update', data)
         getMiaAnnos(maxAmount)
         getWorkingAnnoTask()
     } catch (e) {console.log(e)}
@@ -70,8 +80,7 @@ export const updateMia = (data, getMiaAnnos, getWorkingAnnoTask, maxAmount) => a
 
 export const finishMia = (callback, getWorkingAnnoTask) => async dispatch => {
     try {
-        const response = await axios.get(API_URL + '/mia/finish')
-        
+        await axios.get(API_URL + '/mia/finish')
         if(callback){
             callback()
         }

@@ -1,95 +1,90 @@
 {
   "name": "lost",
-  "version": "0.0.1",
-  "description": "LOST Label Objects and Save Time",
-  "author": "L3P UG (haftungsbeschränkt)",
-  "homepage": "https://l3p-lost.de",
-  "copyright": "Copyright 2018 L3P UG (haftungsbeschränkt)",
-  "license": "MIT",
+  "version": "0.1.0",
   "private": true,
-  "repository": {
-    "type": "git",
-    "url": "no-git-yet"
-  },
   "dependencies": {
-    "@cartok/object-assign-deep": "^0.4.3",
-    "@coreui/coreui": "^2.0.15",
-    "@coreui/coreui-plugin-chartjs-custom-tooltips": "^1.2.0",
-    "@coreui/icons": "0.3.0",
-    "@coreui/react": "^2.0.9",
-    "axios": "^0.18.0",
-    "bootstrap": "^4.1.3",
-    "chart.js": "^2.7.2",
-    "classnames": "^2.2.6",
-    "core-js": "^2.5.7",
-    "enzyme": "^3.7.0",
-    "enzyme-adapter-react-16": "^1.6.0",
-    "flag-icon-css": "^3.2.0",
-    "font-awesome": "^4.7.0",
-    "jwt-decode": "^2.2.0",
+    "@coreui/chartjs": "^2.0.0",
+    "@coreui/coreui": "^3.4.0",
+    "@coreui/icons": "^2.0.0-rc.0",
+    "@coreui/icons-react": "^1.0.2",
+    "@coreui/react": "^3.4.6",
+    "@coreui/react-chartjs": "^1.0.1",
+    "@coreui/utils": "^1.3.1",
+    "@fortawesome/fontawesome-svg-core": "^1.2.35",
+    "@fortawesome/free-brands-svg-icons": "^5.15.4",
+    "@fortawesome/free-regular-svg-icons": "^5.15.4",
+    "@fortawesome/free-solid-svg-icons": "^6.1.1",
+    "@fortawesome/react-fontawesome": "^0.1.14",
+    "@testing-library/jest-dom": "^5.11.4",
+    "@testing-library/react": "^11.1.0",
+    "@testing-library/user-event": "^12.1.10",
+    "axios": "^0.21.2",
+    "chonky": "^2.1.0",
+    "chonky-icon-fontawesome": "^2.1.0",
+    "file-saver": "^2.0.5",
+    "i18next": "^19.8.7",
+    "i18next-browser-languagedetector": "^6.0.1",
+    "i18next-http-backend": "^1.1.0",
+    "jwt-decode": "^3.1.2",
     "l3p-frontend": "^3.2.12",
-    "lodash": "^4.17.11",
-    "node-sass": "^4.9.3",
-    "prop-types": "^15.6.2",
-    "react": "^16.5.2",
-    "react-app-polyfill": "^0.1.3",
+    "lodash": "^4.17.15",
+    "node-sass": "^7.0.0",
+    "prop-types": "^15.7.2",
+    "react": "^16.11.0",
     "react-autocomplete": "^1.8.1",
-    "react-chartjs-2": "^2.7.2",
-    "react-contexify": "^4.0.0",
-    "react-dom": "^16.5.2",
-    "react-graph-vis": "^1.0.2",
-    "react-lazylog": "^3.2.0",
-    "react-loadable": "^5.5.0",
+    "react-bootstrap-sweetalert": "^5.2.0",
+    "react-color": "^2.19.3",
+    "react-directed-graph": "^1.0.7",
+    "react-dom": "^16.11.0",
+    "react-draggable": "^3.3.0",
+    "react-dropzone": "^12.0.4",
+    "react-graph-vis": "^1.0.7",
+    "react-i18next": "^11.8.5",
+    "react-icons": "^4.1.0",
     "react-modal": "^3.8.1",
     "react-notifications": "^1.4.3",
-    "react-redux": "^5.1.0",
-    "react-router-config": "^4.4.0-beta.1",
-    "react-router-dom": "^4.3.1",
-    "react-table": "^6.9.0",
-    "react-test-renderer": "^16.5.2",
-    "reactstrap": "^7.1.0",
-    "redux": "^4.0.1",
-    "redux-form": "^7.4.2",
+    "react-query": "^3.31.0",
+    "react-redux": "^7.2.2",
+    "react-router-dom": "^5.2.0",
+    "react-scripts": "4.0.3",
+    "react-stepper-wizard": "^1.1.5",
+    "react-table": "^6.5.3",
+    "react-use": "^17.1.0",
+    "react-zoom-pan-pinch": "^2.1.3",
+    "reactstrap": "^8.9.0",
+    "redux": "4.0.5",
+    "redux-form": "^8.2.0",
     "redux-thunk": "^2.3.0",
-    "simple-line-icons": "^2.4.1"
-  },
-  "devDependencies": {
-    "circular-dependency-plugin": "^5.0.2",
-    "copy-webpack-plugin": "^4.6.0",
-    "react-app-rewire-eslint": "^0.2.3",
-    "react-app-rewired": "^1.6.2",
-    "react-scripts": "^2.0.4"
+    "sass": "^1.32.7",
+    "semantic-ui-css": "^2.4.1",
+    "semantic-ui-react": "^2.0.3",
+    "streamsaver": "^2.0.6",
+    "sweetalert2": "^10.14.0",
+    "validator": "^13.7.0",
+    "web-vitals": "^1.0.1"
   },
   "scripts": {
-    "install:tools": "npm install --prefix src/tools/sia -d && npm install --prefix src/components/pipeline -d",
-    "start": "bash src/frontendDev.sh && npm run install:tools && react-app-rewired start",
-    "build": "react-app-rewired build",
-    "test": "react-app-rewired test",
-    "test:debug": "react-app-rewired --inspect-brk test --runInBand",
-    "eject": "react-app-rewired eject"
-  },
-  "bugs": {
-    "url": "https://github.com/l3p-cv/lost/issues"
+    "start": "REACT_APP_PORT='' react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
-    "extends": "react-app"
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
-  "eslintIgnore": [
-    "node_modules"
-  ],
-  "browserslist": [
-    ">0.2%",
-    "not dead",
-    "not ie <= 9",
-    "not op_mini all"
-  ],
-  "nodemonConfig": {
-    "watch": [
-      "test/**/*",
-      "src/**/*"
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
     ],
-    "ext": "js",
-    "delay": 500,
-    "verbose": true
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }

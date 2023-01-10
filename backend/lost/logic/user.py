@@ -38,6 +38,13 @@ from lost.db import state
 
 #     data_man.save_obj(usermeta)
 
+def get_user_default_group(dbm, user_id):
+    for user_group in dbm.get_user_groups_by_user_id(user_id):
+        if user_group.group.is_user_default:
+            group_id = user_group.group.idx
+            return group_id
+    return None
+
 def release_user_annos(dbm, user_id):
     '''Release locked annos for a specific user.
 
@@ -45,15 +52,11 @@ def release_user_annos(dbm, user_id):
         dbm (object): DBMan object.
         user_id (int): ID of the user to release locked annos.
     '''
-    print('Was Here! User id is: {}'.format(user_id))
     for anno_task in dbm.get_anno_task(state=state.AnnoTask.IN_PROGRESS):
         locked_annos = dbm.get_locked_img_annos(anno_task.idx)
-        print('locked annos')
-        print(locked_annos)
-        for anno in locked_annos:
-            print('UserID: {}, AnnoID: {}'.format(anno.user_id, anno.idx))
+        # for anno in locked_annos:
+        #     print('UserID: {}, AnnoID: {}'.format(anno.user_id, anno.idx))
         locked_user_annos = [anno for anno in locked_annos if anno.user_id == user_id]
-        print(locked_user_annos)
         for anno in locked_user_annos:
             anno.state = state.Anno.UNLOCKED
             anno.timestamp_lock = None
@@ -61,12 +64,9 @@ def release_user_annos(dbm, user_id):
             dbm.add(anno)
                 
         locked_annos = dbm.get_locked_two_d_annos(anno_task.idx)
-        print('locked 2d annos')
-        print(locked_annos)
-        for anno in locked_annos:
-            print('UserID: {} AnnoID: {}'.format(anno.user_id, anno.idx))
+        # for anno in locked_annos:
+        #     print('UserID: {} AnnoID: {}'.format(anno.user_id, anno.idx))
         locked_user_annos = [anno for anno in locked_annos if anno.user_id == user_id]
-        print(locked_user_annos)
         for anno in locked_user_annos:
             anno.state = state.Anno.UNLOCKED
             anno.timestamp_lock = None

@@ -6,7 +6,7 @@ from lost.logic.anno_task import set_finished, update_anno_task
 from lost.logic.file_man import FileMan
 from datetime import datetime
 import skimage.io
-from lost.pyapi import anno_helper
+from lost.pyapi.utils import anno_helper
 
 __author__ = "Gereon Reus"
 
@@ -26,7 +26,7 @@ def get_next(db_man, default_user_id, max_amount):
     return images
 
 class ImageSerialize(object):
-    def __init__(self, db_man, annos, user_id,proposedLabel=True):
+    def __init__(self, db_man, annos, user_id, proposedLabel=True):
         self.mia_json = dict()
         self.db_man = db_man
         self.annos = annos
@@ -40,7 +40,8 @@ class ImageSerialize(object):
         for anno in self.annos:
             image = dict()
             image['id'] = anno.idx
-            image['path'] = anno.img_path 
+            # image['path'] = anno.img_path
+            image['type'] = 'imageBased' 
             self.mia_json['images'].append(image) 
 
 class TwoDSerialize(object):
@@ -52,8 +53,9 @@ class TwoDSerialize(object):
         self.anno_task_id = anno_task_id
         self.file_man = FileMan(self.db_man.lostconfig)
         self.proposedLabel = proposedLabel
+        self.config = json.loads(db_man.get_anno_task(anno_task_id=anno_task_id).configuration)
     def serialize(self):
-        directory = self.file_man.get_mia_crop_path(self.anno_task_id)
+        # directory = self.file_man.get_mia_crop_path(self.anno_task_id)
         self.mia_json['images'] = list()
         self.mia_json['proposedLabel'] = None
         if self.proposedLabel:
@@ -61,50 +63,16 @@ class TwoDSerialize(object):
         for anno in self.annos:
             image_json = dict()
             image_json['id'] = anno.idx
+            image_json['type'] = 'annoBased'
+            try:
+                image_json['drawAnno'] = self.config['drawAnno']
+                image_json['addContext'] = self.config['addContext']
+            except:
+                pass
             # get image_anno of two_d anno
             image_anno = self.db_man.get_image_annotation(img_anno_id=anno.img_anno_id)
-            cropped_image_path = os.path.join(directory, str(anno.idx)) + '.png'
-            relative_cropped_image_path = self.file_man.mia_crop_rel_path + \
-            str(self.anno_task_id) + "/" + str(anno.idx) + ".png"
-            if os.path.exists(cropped_image_path):
-                image_json['path'] = relative_cropped_image_path 
-                self.mia_json['images'].append(image_json) 
-                continue
-            else:    
-                # crop two_d_anno out of image_anno
-                config = get_config(self.db_man, self.user_id)
-                draw_anno = False
-                context = None
-                try:
-                    draw_anno = config['drawAnno']
-                except:
-                    pass
-                try:
-                    context = float(config['addContext'])
-                except:
-                    pass
-                self._crop_twod_anno(image_anno, anno, draw_anno, 
-                    context, cropped_image_path)
-                image_json['path'] = relative_cropped_image_path 
-                self.mia_json['images'].append(image_json) 
+            self.mia_json['images'].append(image_json) 
 
-    def _crop_twod_anno(self, img_anno, twod_anno, draw_anno, context, out_path):
-        '''Helper method to crop a bounding box for a TwoDAnnotation and store it on disc
-        
-        Args:
-            img_anno (:class:`model.ImageAnno`): The ImageAnno where the twod_anno belongs to.
-            twod_anno (:class:`model.TwoDAnno`): The 2D-anno to crop.
-            draw_anno (bool): Indicates wether the annotation should be painted inside the crop.
-            context (float): Value that indicates how much context should 
-                be cropped around the 2D annotation.  
-            out_path (str): Path to store the cropped image.
-        '''
-        image = skimage.io.imread(self.file_man.get_abs_path(img_anno.img_path))
-        crops, _ = anno_helper.crop_boxes([twod_anno.to_vec('anno.data')],
-            [twod_anno.to_vec('anno.dtype')], image, context=context, 
-            draw_annotations=draw_anno)
-        cropped_image = crops[0]
-        skimage.io.imsave(out_path, cropped_image)
 
 def update(db_man, user_id, data):
     at = __get_mia_anno_task(db_man, user_id)
@@ -146,6 +114,7 @@ def get_label_trees(db_man, user_id):
                 label_leaf_json['label'] = label_leaf.name
                 label_leaf_json['nameAndClass'] = label_leaf.name + " (" + rll.label_leaf.name + ")"
                 label_leaf_json['description'] = label_leaf.description
+                label_leaf_json['color'] = label_leaf.color
                 label_trees_json['labels'].append(label_leaf_json)
         return label_trees_json
     else: 
@@ -256,8 +225,8 @@ def __get_next_image_anno(db_man, user_id, at, max_amount):
         for anno in annos:
             anno.timestamp_lock = datetime.now()
             db_man.save_obj(anno)
-        image_serialize = ImageSerialize(db_man, annos, user_id, proposedLabel=False)
-        image_serialize.serialize()
+        image_serialize = ImageSerialize(db_man, annos, user_id)
+        image_serialize.serialize() 
         return image_serialize.mia_json
     # -- fill with new annos if size < max_amount
     # -- remove if size > max_amount
@@ -298,6 +267,7 @@ def __update_image_annotation(db_man, user_id, data):
             image.anno_time = anno_time
             db_man.add(image)
             for label in data['labels']:
+                
                 lab = model.Label(dtype=dtype.Label.IMG_ANNO,
                                 label_leaf_id=label['id'],
                                 annotator_id=user_id,
@@ -342,16 +312,18 @@ def __update_two_d_annotation(db_man, user_id, data):
 def get_proposed_label(db_man, anno, user_id):
     if anno:
         at = __get_mia_anno_task(db_man, user_id)
-        config = json.loads(at.configuration)
-        try:
+        config = json.loads(at.configuration) 
+        try: 
             if 'showProposedLabel' in config:
                 if config['showProposedLabel'] == True:
+                    print("####################################") 
+                    print(config)
                     label_trees = get_label_trees(db_man, user_id)
-                    for tree in label_trees['labelTrees']:
-                        for leaf in tree['labelLeaves']:
-                            if leaf['id'] == anno.sim_class:
-                                return leaf['nameAndClass']
-        except:
+                    # for tree in label_trees['labels']:
+                    for leaf in label_trees['labels']:
+                        if leaf['id'] == anno.sim_class:
+                            return leaf['id']
+        except: 
             return None
     return None
 
@@ -367,3 +339,45 @@ def get_config(db_man, user_id):
     at = __get_mia_anno_task(db_man, user_id)
     config = json.loads(at.configuration)
     return config
+
+def get_special(db_man, user_id, mia_ids):
+    at = __get_mia_anno_task(db_man, user_id)
+    if at and at.pipe_element.pipe.state != state.Pipe.PAUSED:
+        config = json.loads(at.configuration)
+        if config['type'] == 'annoBased':
+            return __get_special_two_d_annos(db_man, user_id, at, mia_ids)
+        elif config['type'] == 'imageBased':    
+            return __get_special_image_annos(db_man, user_id, at, mia_ids)
+    images = dict()
+    images['images'] = list()
+    return images
+
+def __get_special_two_d_annos(db_man, user_id, at, mia_ids):
+    annos = db_man.get_two_d_annotations_by_ids(at.idx, user_id, mia_ids)
+    if len(annos) > 0:
+        for anno in annos:
+            anno.timestamp_lock = datetime.now()
+            anno.state = state.Anno.LOCKED
+            for label in anno.labels:
+                if label.annotator_id == user_id:
+                    db_man.delete(label)
+            db_man.save_obj(anno)
+            db_man.commit()
+        image_serialize = TwoDSerialize(db_man, annos, user_id, at.idx, proposedLabel=False)
+        image_serialize.serialize()
+        return image_serialize.mia_json
+
+def __get_special_image_annos(db_man, user_id, at, mia_ids):
+    annos = db_man.get_image_annotations_by_ids(at.idx, user_id, mia_ids)
+    if len(annos) > 0:
+        for anno in annos:
+            anno.timestamp_lock = datetime.now()
+            anno.state = state.Anno.LOCKED
+            for label in anno.labels:
+                if label.annotator_id == user_id:
+                    db_man.delete(label)
+            db_man.save_obj(anno)
+            db_man.commit()
+        image_serialize = ImageSerialize(db_man, annos, user_id)
+        image_serialize.serialize()
+        return image_serialize.mia_json

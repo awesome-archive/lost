@@ -1,7 +1,7 @@
 import pytest
 from lost.db import model, dtype
 from lost.db.access import DBMan
-from lost.logic import config
+import lostconfig as config
 import json
 import datetime
 from lost.utils import testils
@@ -73,14 +73,14 @@ def full_bbox_anno():
                 'h':REF_BBOX[3]
             }
         ),
-        dtype=dtype.TwoDAnno.BBOX,
-        label_leaf_id=label_leaf_id
+        dtype=dtype.TwoDAnno.BBOX
     )
+    lbl = model.Label(label_leaf_id=label_leaf_id)
+    twod_anno.labels.append(lbl)
     twod_anno.annotator = test_user
     dbm.add(twod_anno)
     dbm.commit()
     yield twod_anno
-    dbm.delete(twod_anno.label)
     dbm.delete(twod_anno)
     dbm.commit()
     # testils.delete_user(dbm, test_user)
@@ -155,35 +155,25 @@ class TestTwoDAnnos(object):
     def test_to_dict_flat(self, full_bbox_anno):
         bbox = full_bbox_anno
         my_dict = bbox.to_dict()
-        assert my_dict['anno.data'] == bbox.data
-        assert my_dict['anno.lbl.name'] == bbox.label.label_leaf.name
-        assert my_dict['anno.lbl.idx'] == bbox.label.label_leaf.idx
-        assert my_dict['anno.lbl.external_id'] == bbox.label.label_leaf.external_id
+        assert my_dict['anno_data'] == bbox.get_anno_serialization_format()
+        assert my_dict['anno_lbl'][0] == bbox.labels[0].label_leaf.name
 
     def test_to_dict_hierarchical(self, full_bbox_anno):
         bbox = full_bbox_anno
         my_dict = bbox.to_dict(style='hierarchical')
-        assert my_dict['anno.lbl.name'] == bbox.label.label_leaf.name
-        assert my_dict['anno.lbl.idx'] == bbox.label.label_leaf.idx
-        assert my_dict['anno.lbl.external_id'] == bbox.label.label_leaf.external_id
-        assert my_dict['anno.data']['x'] == REF_BBOX[0]
-        assert my_dict['anno.data']['y'] == REF_BBOX[1]
-        assert my_dict['anno.data']['w'] == REF_BBOX[2]
-        assert my_dict['anno.data']['h'] == REF_BBOX[3]
+        assert my_dict['anno_lbl'][0] == bbox.labels[0].label_leaf.name
+        assert my_dict['anno_data'][0][0] == REF_BBOX[0]
+        assert my_dict['anno_data'][0][1] == REF_BBOX[1]
+        assert my_dict['anno_data'][0][2] == REF_BBOX[2]
+        assert my_dict['anno_data'][0][3] == REF_BBOX[3]
         
     def test_to_df(self, full_bbox_anno):
         bbox = full_bbox_anno
         df = bbox.to_df()
-        assert df['anno.data'].values[0] == bbox.data
-        assert df['anno.lbl.name'].values[0] == bbox.label.label_leaf.name
-        assert df['anno.lbl.idx'].values[0] == bbox.label.label_leaf.idx
-        assert df['anno.lbl.external_id'].values[0] == bbox.label.label_leaf.external_id
+        assert df['anno_data'].values[0] == bbox.get_anno_serialization_format()[0]
+        assert df['anno_lbl'].values[0] == bbox.labels[0].label_leaf.name
 
     def test_to_vec(self, full_bbox_anno):
         bbox = full_bbox_anno
-        assert check_bbox(REF_BBOX, bbox.to_vec('anno.data'))
-        assert bbox.to_vec('anno.lbl.idx') == full_bbox_anno.label.label_leaf_id
-        vec = bbox.to_vec(['anno.lbl.name','anno.lbl.idx', 'anno.lbl.external_id'])
-        assert vec[0] == bbox.label.label_leaf.name
-        assert vec[1] == bbox.label.label_leaf.idx
-        assert vec[2] == bbox.label.label_leaf.external_id
+        assert check_bbox(REF_BBOX, bbox.to_vec('anno_data'))
+        assert bbox.to_vec('anno_lbl') == full_bbox_anno.labels[0].label_leaf.name

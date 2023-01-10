@@ -1,5 +1,7 @@
 import json
 from datetime import datetime
+from lost import settings
+from lost.logic.file_access import UserFileAccess
 from lost.db import model, access, dtype
 from lost.logic.file_man import FileMan
 from lost.logic.label import LabelTree
@@ -8,17 +10,24 @@ __author__ = "Gereon Reus"
 ############################ get_templates ########################
 #                                                                 #
 ###################################################################
-def get_templates(db_man, debug_mode=False):
+def get_templates(db_man, group_id=None, add_global=False, debug_mode=False):
     '''Read out all templates.
 
     Args:
         db_man:
+        visibility: Visibility level
         debug_mode (Boolean): Weather to load PipeTemplate in debug too
     
     Returns: 
         JSON with all meta info about the pipe templates.
     '''
-    pipe_templates = db_man.get_all_pipeline_templates()
+    if not group_id:
+        pipe_templates = db_man.get_all_pipeline_templates(global_only=True)
+    elif group_id:
+        if add_global:
+            pipe_templates = db_man.get_all_pipeline_templates(group_id=group_id, add_global=True)
+        else:
+            pipe_templates = db_man.get_all_pipeline_templates(group_id=group_id)
     pipe_templates_json = dict()
     pipe_templates_json["templates"] = list()
 
@@ -28,9 +37,14 @@ def get_templates(db_man, debug_mode=False):
         if not debug_mode:
             if temp.is_debug_mode:
                 continue
+        for r in db_man.count_pipelines_by_template_id(temp.idx)[0]:
+            pipelineCount = r
         pipe_template_json['isDebug'] = temp.is_debug_mode
         pipe_template_json['id'] = temp.idx
-        pipe_template_json['date'] = temp.timestamp
+        pipe_template_json['date'] = temp.timestamp.strftime(settings.STRF_TIME)
+        pipe_template_json['group_id'] = temp.group_id
+        pipe_template_json['pipeProject'] = temp.pipe_project
+        pipe_template_json['pipelineCount'] = pipelineCount
         content = json.loads(temp.json_template)
         # --------------- name  ------------------------------
         try:
@@ -81,16 +95,24 @@ def get_template(db_man, template_id ,user):
         finally:
             return error_msg
     file_man = FileMan(db_man.lostconfig)
-    available_raw_files = file_man.get_media_rel_path_tree()
+    available_raw_files =dict() #file_man.get_media_rel_path_tree()
     available_groups = db_man.get_groups()
-    available_label_trees = db_man.get_all_label_trees()
+    default_group = db_man.get_group_by_name(user.user_name)
+    available_label_trees = db_man.get_all_label_trees(group_id=default_group.idx, add_global=True)
     available_scripts = db_man.get_all_scripts()
+    available_fs = list(db_man.get_public_fs())
+    for user_group in db_man.get_user_groups_by_user_id(user.idx):
+        if user_group.group.is_user_default:
+            group_id = user_group.group.idx
+    available_fs += list(db_man.get_fs(group_id=group_id))
+    
     try:
          template_serialize = TemplateSerialize(db_man, template,
                                             available_raw_files, 
                                             available_label_trees, 
                                             available_groups,
-                                            available_scripts)
+                                            available_scripts,
+                                            available_fs, user)
     except TypeError:
             return "No JSON found in PipeTemplate."
     template_serialize.add_available_info()
@@ -107,7 +129,9 @@ class TemplateSerialize(object):
     def __init__(self, dbm, template=None, available_raw_files=None,
                  available_label_trees=None,
                  available_groups=None,
-                 available_scripts=None):
+                 available_scripts=None,
+                 available_fs=None,
+                 user=None):
         self.dbm = dbm
         self.template = template
         self.template_json = json.loads(template.json_template)
@@ -115,10 +139,12 @@ class TemplateSerialize(object):
         self.available_label_trees = available_label_trees
         self.available_groups = available_groups
         self.available_scripts = available_scripts
+        self.available_fs = available_fs
+        self.user = user
 
     def add_available_info(self):
         self.template_json['id'] = self.template.idx
-        self.template_json['timestamp'] = self.template.timestamp
+        self.template_json['timestamp'] = self.template.timestamp.strftime(settings.STRF_TIME)
         self.template_json['availableGroups'] = self.__groups()
         self.template_json['availableLabelTrees'] = self.__label_trees()
 
@@ -126,16 +152,33 @@ class TemplateSerialize(object):
             if 'datasource' in pe:
                 if pe['datasource']['type'] == 'rawFile':
                     pe['datasource']['fileTree'] = self.available_raw_files
+                    pe['datasource']['filesystems'] = self.__get_filesystem_infos()
             elif 'script' in pe:
                 pe['script']['arguments'] = self.__script_arguments(pe)
                 pe['script']['id'] = self.__script_id(pe)
                 pe['script']['envs'] = self.__script_envs(pe)
    
+    def __get_filesystem_infos(self):
+        res = []
+        for fs in self.available_fs:
+            try:
+                ufa = UserFileAccess(self.dbm, self.user, fs)
+            except:
+                pass
+            res.append({
+                'name': fs.name,
+                'id': fs.idx,
+                'rootPath': fs.root_path,
+                'permission': ufa.get_permission(),
+                'fsType': fs.fs_type
+            })
+        return res
 
     def __label_trees(self):
         label_trees_json = list()
         for label_tree in self.available_label_trees:
-            label_trees_json.append(LabelTree(self.dbm, label_tree.idx).to_hierarchical_dict())
+            if len(label_tree.label_leaves) > 0:
+                label_trees_json.append(LabelTree(self.dbm, label_tree.idx).to_hierarchical_dict())
         return label_trees_json
 
     def __groups(self):
@@ -148,6 +191,7 @@ class TemplateSerialize(object):
                 group_name += " (user)"
             else:
                 group_name += " (group)"
+            group_json['name'] = group.name
             group_json['groupName'] = group_name
             group_json['isUserDefault'] = group.is_user_default
             groups_json.append(group_json)

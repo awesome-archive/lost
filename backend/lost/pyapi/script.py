@@ -5,19 +5,20 @@ __author__ = 'Jonas Jäger'
 
 from lost.db import access
 from lost.db import dtype, state
-from lost.logic.file_man import FileMan
+from lost.logic.file_access import UserFileAccess
 from lost.logic import log
 from lost.pyapi import inout
 import argparse
 import datetime
 import traceback
 import os
-from lost.logic.config import LOSTConfig
+from lostconfig import LOSTConfig
 import json
-import pickle
 from lost.pyapi import pe_base
 from lost.logic.label import LabelTree
 from lost.pyapi import pipe_elements
+from lost.logic.db_access import UserDbAccess
+import ast 
 
 def report_script_err(pipe_element, task, dbm, msg):
     '''Report an error for a script to portal
@@ -57,7 +58,6 @@ class Script(pe_base.Element):
                                 help='Id of related pipeline element.')
             args = parser.parse_args()
         lostconfig = LOSTConfig()
-        self.file_man = FileMan(lostconfig)
         dbm = access.DBMan(lostconfig)
         self._dbm = dbm #type: lost.db.access.DBMan
         if pe_id is None:
@@ -65,26 +65,41 @@ class Script(pe_base.Element):
         else:
             pe = dbm.get_pipe_element(pe_id)
         super().__init__(pe, dbm)
-        logfile_path = self.file_man.get_pipe_log_path(self._pipe.idx)
-        self._logger = log.get_file_logger(os.path.basename(pe.script.path),
-                                          logfile_path)
+
+        user_id = self.pipe_info.user.idx
+        self.user_id = user_id
+        db_fs = dbm.get_user_default_fs(user_id)
+        self.ufa = UserFileAccess(dbm, self.pipe_info.user, db_fs)
+        self.dba = UserDbAccess(dbm, user_id)
+
+        logfile_path = self.ufa.get_pipe_log_path(self._pipe.idx)
+        self._log_stream = self.ufa.fs.open(logfile_path, 'a')
+        self._logger = log.get_stream_logger(os.path.basename(pe.script.path),
+                                          self._log_stream)
         if self.pipe_info.logfile_path is None or not self.pipe_info.logfile_path:
-            self.pipe_info.logfile_path = self.get_rel_path(logfile_path)
+            self.pipe_info.logfile_path = logfile_path
         self._inp = inout.Input(self)
         self._outp = inout.ScriptOutput(self)
         self.rejected_execution = False
         # If pe_id is None we have a normal script
         # If pe_id is not None a JupyterNotebook uses this script
         if pe_id is None:
-            try:
-                self.main()
-                self.i_am_done()
-                self._dbm.close_session()
-            except:
-                err_msg = str(datetime.datetime.now()) + '\n'
-                err_msg += traceback.format_exc()
-                self.report_err(err_msg)
-                self._dbm.close_session()
+            return self._run()
+
+    def _run(self, ret_success=False):
+        try:
+            self.main()
+            self.i_am_done()
+            success = 'PipeElementID: {}, Successfully executed script: {}'.format(
+                self._pipe_element.idx, self._pipe_element.script.name)
+            self._dbm.close_session()
+            if ret_success:
+                return success
+        except:
+            err_msg = str(datetime.datetime.now()) + '\n'
+            err_msg += traceback.format_exc()
+            self.report_err(err_msg)
+            self._dbm.close_session()
     
     def __str__(self):
         my_str = 'I am a Script.\nMy name is: {}\nPipeElementID: {}'.format(self._pipe_element.script.name, 
@@ -115,17 +130,6 @@ class Script(pe_base.Element):
         '''
         return self._outp #type: inout.ScriptOutput
 
-    def get_rel_path(self, path):
-        '''Get relativ path for current project
-
-        Args:
-            path (str): A absolute path
-
-        Returns:
-            str : Relative path
-        '''
-        return self.file_man.get_rel_path(path)
-
     def get_label_tree(self, name):
         '''Get a LabelTree by name.
         
@@ -137,8 +141,9 @@ class Script(pe_base.Element):
                 If a label tree with the given name exists 
                 it will be returned. Otherwise None
                 will be returned'''
-        root_list = self._dbm.get_all_label_trees()
-        root = next(filter(lambda x: x==name, root_list), None)
+        group_id = self._pipe.group_id
+        root_list = self._dbm.get_all_label_trees(group_id, add_global=True)
+        root = next(filter(lambda x: x.name==name, root_list), None)
         if root is None:
             return None
         else:
@@ -159,17 +164,6 @@ class Script(pe_base.Element):
         tree.create_root(name, external_id=external_id)
         return tree
 
-    def get_abs_path(self, path):
-        '''Get absolute path in current file system.
-
-        Args:
-            path (str): A relative path.
-
-        Returns:
-            str: Absolute path
-        '''
-        return self.file_man.get_abs_path(path)
-
     def break_loop(self):
         '''Break next loop in pipeline.
         '''
@@ -177,6 +171,7 @@ class Script(pe_base.Element):
         if loop_e is not None:
             loop_e.loop.break_loop = True
         self._dbm.add(loop_e)
+        self._dbm.commit()
 
     def loop_is_broken(self):
         '''Check if the current loop is broken'''
@@ -198,36 +193,49 @@ class Script(pe_base.Element):
         '''
         if self._pipe_element.arguments:
             args = json.loads(self._pipe_element.arguments)
-            return args[arg_name]['value']
+            # args = ast.literal_eval(self._pipe_element.arguments)
+            my_arg = args[arg_name]['value']
+            if my_arg in ['t', 'true', 'yes']:
+                return True
+            if my_arg in ['f', 'false', 'no']:
+                return False
+            if my_arg in ['-', '', '[]']:
+                return None
+            try:
+                return ast.literal_eval(my_arg)
+            except:
+                return my_arg
+                
         else:
             return None
 
-    def get_path(self, file_name, context='instance', ptype='abs'):
+    def get_fs(self, name=None):
+        '''Get default lost filesystem or a specific filesystem by name.
+
+        Returns:
+            fsspec.spec.AbstractFileSystem: See https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.spec.AbstractFileSystem
+        '''
+        if name is None:
+            return self.ufa.fs
+        return self.ufa.get_fs(name)
+
+    def get_path(self, file_name, context='instance'):
         '''Get path for the filename in a specific context in filesystem.
 
         Args:
             file_name (str): Name or relative path for a file.
-            context (str): Options: *instance*, *pipe*, *static*:
-            ptype (str): Type of this path. Can be relative or absolute
-                Options: *abs*, *rel*
+            context (str): Options: *instance*, *pipe*
 
         Returns:
-            str: Path to the file in the specified context.
+            str: Absolute path to the file in the specified context.
         '''
         if context == 'instance':
-            path = os.path.join(self.instance_context, file_name)
+            path = os.path.join(self.ufa.get_instance_path(self._pe), file_name)
         elif context == 'pipe':
-            path = os.path.join(self.pipe_context, file_name)
-        elif context == 'static':
-            path = os.path.join(self.static_context, file_name)
+            path = os.path.join(self.ufa.get_pipe_context_path(self._pe), file_name)
         else:
-            raise Exception('Unknown context: {}'.format(context))
-        if ptype == 'abs':
-            return path
-        elif ptype == 'rel':
-            return self.get_rel_path(path)
-        else:
-            raise Exception('Unknown argument ptype: {}'.format(ptype))
+            raise Exception('Unknown context: {}. Should be *instance* or *pipe*!'.format(context))
+        return path
 
     @property
     def iteration(self):
@@ -236,33 +244,6 @@ class Script(pe_base.Element):
         Number of times this script has been executed.
         '''
         return self._pipe_element.iteration
-
-    @property
-    def instance_context(self):
-        '''str: Get the path to store files that are only valid for this instance.
-        '''
-        abs_path = self.file_man.create_instance_path(self._pipe_element)
-        rel_path = self.file_man.make_path_relative(abs_path)
-        self._pipe_element.instance_context = rel_path
-        self._dbm.add(self._pipe_element)
-        return abs_path
-
-    @property
-    def pipe_context(self):
-        '''str: Root path to store files that should be visible for all elements
-        in the pipeline.
-        '''
-        return self.file_man.get_pipe_context_path(self._pipe_element)
-
-    @property
-    def static_context(self):
-        '''str: Get the static path.
-
-        Files that are stored at this path can be accessed by all instances of a
-        script.
-        '''
-        return os.path.join(self._lostconfig.project_path,
-                            os.path.split(self._pipe_element.script.path)[0])
 
     @property
     def progress(self):
@@ -280,7 +261,6 @@ class Script(pe_base.Element):
         '''
         self._pipe_element.progress = value
         self._dbm.commit()
-
 
     def reject_execution(self):
         '''Reject execution of this script and set it to PENDING again.
@@ -310,7 +290,7 @@ class Script(pe_base.Element):
             * :class:`lost.pyapi.pipe_elements.Loop`
 
         '''
-        pe = self._dbm.get_pipe_element(pe_id)
+        pe = self.dba.get_alien(pe_id)
 
         if pe.dtype == dtype.PipeElement.SCRIPT:
             return Script(pe_id=pe_id)
@@ -355,6 +335,7 @@ class Script(pe_base.Element):
                 self.outp.clean_up()
             self._pipe_man.pipe.state = state.Pipe.IN_PROGRESS
             self._dbm.commit()
+        self._log_stream.close()
 
     def report_err(self, msg):
         '''Report an error for this user script to portal

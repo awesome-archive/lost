@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 #from py3nvml.py3nvml import *
 import sys
 from lost.db import model, state, dtype
@@ -7,7 +7,7 @@ import lost
 from lost.logic.pipeline import pipe_model
 import os
 import shutil
-from lost.logic.file_man import FileMan
+from lost.logic.file_man import FileMan, AppFileMan
 from lost.logic import anno_task as at_man
 from lost.pyapi import script as script_api
 import subprocess
@@ -18,32 +18,51 @@ import importlib
 import traceback
 import lost.logic.log
 import logging
-from celery.utils.log import get_task_logger
-from celery import task
+# from celery.utils.log import get_task_logger
+# from celery import task
 from lost.db.access import DBMan
-from lost.logic.config import LOSTConfig
+from lostconfig import LOSTConfig
 from lost.logic.pipeline.worker import WorkerMan, CurrentWorker
 from lost.logic import email
+from lost.logic.dask_session import ds_man, ppp_man
+from lost.logic.pipeline import exec_utils
 
+def gen_extra_install_cmd(extra_packages, lostconfig):
+    def cmd(install_cmd, packages):
+        return f'{install_cmd} {packages}'
+    extra = json.loads(extra_packages)
+    pip_cmd = None
+    if lostconfig.allow_extra_pip:
+        if len(extra['pip']) > 1:
+            pip_cmd = cmd('pip install', extra['pip'])
+    conda_cmd = None
+    if lostconfig.allow_extra_conda:
+        if len(extra['conda']) > 1:
+            conda_cmd = cmd('conda install', extra['conda'])
+    return pip_cmd, conda_cmd
 class PipeEngine(pipe_model.PipeEngine):
-    def __init__(self, dbm, pipe, lostconfig):
+    def __init__(self, dbm, pipe, lostconfig, client, logger_name=''):
         '''
         :type dbm: lost.db.access.DBMan
         :type pipe: lost.db.model.Pipe
         '''
         super().__init__(dbm=dbm, pipe=pipe)
         self.lostconfig = lostconfig #type: lost.logic.config.LOSTConfig
-        self.file_man = FileMan(self.lostconfig)
+        self.file_man = AppFileMan(self.lostconfig)
         # self.logger = lost.logic.log.get_file_logger(
-        #     'Executor: {}'.format(self.lostconfig.env), 
-        #     self.file_man.app_log_path)
-        self.logger = get_task_logger(__name__)
+        #     'Executor: {}'.format(self.lostconfig.env_name), 
+        #     self.file_man.get_app_log_path('PipeEngine.log'))
+        # self.logger = get_task_logger(__name__)
+        self.logger = logging.getLogger('{}.{}'.format(
+            logger_name, self.__class__.__name__)
+        )
+        self.client = client
 
     def process_annotask(self, pipe_e):
         anno_task = self.dbm.get_anno_task(pipe_element_id=pipe_e.idx)
         if anno_task.state == state.AnnoTask.IN_PROGRESS or \
            anno_task.state == state.AnnoTask.PAUSED:
-           if not at_man.has_annotation(self.dbm, anno_task.idx):
+           if not at_man.has_annotation_in_iteration(self.dbm, anno_task.idx, pipe_e.iteration):
                 at_man.set_finished(self.dbm, anno_task.idx)
                 self.logger.warning('No Annotations have been requested for AnnoTask {}'\
                     .format(anno_task.idx))
@@ -72,7 +91,7 @@ class PipeEngine(pipe_model.PipeEngine):
 
     def __gen_run_cmd(self, program, pipe_e):
         # script = self.dbm.get_script(pipe_e.script_id)
-        script_path = os.path.join(self.lostconfig.project_path, pipe_e.script.path)
+        script_path = os.path.join(self.lostconfig.app_path, pipe_e.script.path)
         cmd = self.lostconfig.py3_init + " && "
         cmd += program + " " + script_path + " --idx " + str(pipe_e.idx) 
         return cmd
@@ -81,12 +100,12 @@ class PipeEngine(pipe_model.PipeEngine):
         debug_path = self.file_man.create_debug_path(pipe_element=pipe_e)
         debug_file_path = os.path.join(debug_path, 'debug.sh')
         # init = self.lostconfig.py3_init + '\n'
-        cmd = self.__gen_run_cmd('pudb3', pipe_e)
+        cmd = self.__gen_run_cmd('pudb', pipe_e)
         # script_content = init + cmd
         script_content = cmd
         with open(debug_file_path, 'w') as dfile:
             dfile.write(script_content)
-        script_path = os.path.join(self.lostconfig.project_path, pipe_e.script.path)
+        script_path = os.path.join(self.lostconfig.app_path, pipe_e.script.path)
         dsession_str = "For DEBUG start: bash " + debug_file_path
         dsession_str += "<br>If you want to EDIT go to: " + script_path
         pipe_e.debug_session = dsession_str
@@ -142,16 +161,109 @@ class PipeEngine(pipe_model.PipeEngine):
         if pipe_e.script.envs is not None:
             script_envs = json.loads(pipe_e.script.envs)
             if len(script_envs) == 0:
-                return 'celery'
+                return 'lost'
         else:
             script_envs = list()
-            return 'celery' # Return default queue
+            return 'lost' # Return default queue
         worker_envs = w_man.get_worker_envs()        
         for script_env in script_envs:
             if script_env in worker_envs:
                 return script_env
         self.logger.warning('No suitable env to execute script: {}'.format(pipe_e.script.path))
         return None 
+
+    def dask_done_callback(self, fut):
+        self.logger.info(f'fut.done: {fut.done()}')
+        self.logger.info(f'fut.cancelled: {fut.cancelled()}')
+        exc = fut.exception()
+        if exc is None:
+            self.logger.info(fut.result())
+        else:
+            self.logger.info(f'exception:\n{fut.exception()}')
+            self.logger.error('traceback:\n{}'.format(
+                ''.join(
+                    [f'{x}' for x in traceback.format_tb(fut.traceback())]
+                )
+            ))
+        # class User():
+        #     def __init__(self, idx):
+        #         self.idx = idx
+
+        # # client = ds_man.get_dask_client(User(1))
+        # self.logger.info(f'shutdown cluster: {ds_man.shutdown_cluster(User(1))}')
+        # self.logger.info(f'client.restart: {client.restart()}')
+
+    def _install_extra_packages(self, client, packages):
+        def install(cmd):
+            import subprocess
+            output = subprocess.check_output(f'{cmd}',stderr=subprocess.STDOUT, shell=True)
+            return output
+            # import os
+            # os.system(f'{install_cmd} {packages}')
+        pip_cmd, conda_cmd = gen_extra_install_cmd(packages, self.lostconfig)
+        if pip_cmd is not None:
+            self.logger.info(f'Start install cmd: {pip_cmd}')
+            self.logger.info(client.run(install, pip_cmd))
+            self.logger.info(f'Install finished: {pip_cmd}')
+        if conda_cmd is not None:
+            self.logger.info(f'Start install cmd: {conda_cmd}')
+            self.logger.info(client.run(install, conda_cmd))
+            self.logger.info(f'Install finished: {conda_cmd}')
+
+    def exec_dask_direct(self, client, pipe_e, worker=None):
+        scr = pipe_e.script
+        self._install_extra_packages(client, scr.extra_packages)
+        # extra_packages = json.loads(scr.extra_packages)
+        # if self.lostconfig.allow_extra_pip:
+        #     self._install_extra_packages(client, 'pip install', extra_packages['pip'])
+        # if self.lostconfig.allow_extra_conda:
+        #     self._install_extra_packages(client, 'conda install', extra_packages['conda'])
+        pp_path = self.file_man.get_pipe_project_path(pipe_e.script)
+        # self.logger.info('pp_path: {}'.format(pp_path))
+        # timestamp = datetime.now().strftime("%m%d%Y%H%M%S")
+        # packed_pp_path = self.file_man.get_packed_pipe_path(
+        #     f'{os.path.basename(pp_path)}.zip', timestamp
+        # )
+        # self.logger.info('packed_pp_path: {}'.format(packed_pp_path))
+        # if ppp_man.should_i_update(client, pp_path):
+        #     exec_utils.zipdir(pp_path, packed_pp_path, timestamp)
+        #     self.logger.info(f'Upload file:{client.upload_file(packed_pp_path)}')
+        # import_name = exec_utils.get_import_name_by_script(
+        #     pipe_e.script.name, timestamp)
+        # self.logger.info(f'import_name:{import_name}')
+        import_name = ppp_man.prepare_import(
+            client, pp_path, pipe_e.script.name, self.logger
+        )
+        fut = client.submit(exec_utils.exec_dyn_class, pipe_e.idx, 
+            import_name, workers=worker
+        )
+        fut.add_done_callback(self.dask_done_callback)
+
+    def start_script(self,pipe_e):
+        if self.client is not None: # Workermanagement == static
+            env = self.select_env_for_script(pipe_e)
+            if env is None:
+                return
+            # celery_exec_script.apply_async(args=[pipe_e.idx], queue=env)
+            worker = env
+            client = self.client
+        else:
+            # If client is None, try to get client form dask_session
+            user = self.dbm.get_user_by_id(self.pipe.manager_id)
+            client = ds_man.get_dask_client(user)
+            ds_man.refresh_user_session(user)
+            self.logger.info('Process script with dask client: {}'.format(client))
+            self.logger.info('dask_session: {}'.format(ds_man.session))
+            # logger.info('pipe.manager_id: {}'.format(p.manager_id))
+            # logger.info('pipe.name: {}'.format(p.name))
+            # logger.info('pipe.group_id: {}'.format(p.group_id))
+            worker = None
+            # client.submit(exec_script_in_subprocess, pipe_e.idx)
+        if self.lostconfig.script_execution == 'subprocess':
+            fut = client.submit(exec_script_in_subprocess, pipe_e.idx, workers=worker)
+            fut.add_done_callback(self.dask_done_callback)
+        else:
+            self.exec_dask_direct(client, pipe_e, worker)
 
     def process_pipe_element(self):
         pipe_e = self.get_next_element()
@@ -166,10 +278,10 @@ class PipeEngine(pipe_model.PipeEngine):
                     #     self.make_debug_session(pipe_e)
                     # else:
                     if pipe_e.state == state.PipeElement.PENDING:
-                        env = self.select_env_for_script(pipe_e)
-                        if env is None:
-                            return
-                        celery_exec_script.apply_async(args=[pipe_e.idx], queue=env)
+                        self.start_script(pipe_e)
+                        pipe = pipe_e.pipe
+                        self.logger.info('PipeElementID: {} Excuting script: {}'.format(pipe_e.idx, 
+                            pipe_e.script.name))
             elif pipe_e.dtype == dtype.PipeElement.ANNO_TASK:
                 if pipe_e.state == state.PipeElement.PENDING:
                     update_anno_task(self.dbm, pipe_e.anno_task.idx)
@@ -196,6 +308,12 @@ class PipeEngine(pipe_model.PipeEngine):
                 self.dbm.commit()
             pipe_e = self.get_next_element()
 
+    def refesh_dask_user_session(self):
+        if self.client is None:
+            user = self.dbm.get_user_by_id(self.pipe.manager_id)
+            ds_man.refresh_user_session(user)
+            # self.logger.info('Refreshed dask user session for user: {}'.format(user.idx))
+
     def process_pipeline(self):
         try:
             p = self.pipe
@@ -208,10 +326,12 @@ class PipeEngine(pipe_model.PipeEngine):
             else:
                 return
             if p.state == state.Pipe.PENDING:
+                self.refesh_dask_user_session()
                 p.state = state.Pipe.IN_PROGRESS
                 self.dbm.save_obj(p)
                 self.process_pipe_element()
             elif p.state == state.Pipe.IN_PROGRESS:
+                self.refesh_dask_user_session()
                 self.process_pipe_element()
             elif p.state == state.Pipe.FINISHED:
                 return
@@ -303,45 +423,53 @@ class PipeEngine(pipe_model.PipeEngine):
 
 def gen_run_cmd(program, pipe_e, lostconfig):
     # script = self.dbm.get_script(pipe_e.script_id)
-    script_path = os.path.join(lostconfig.project_path, pipe_e.script.path)
     cmd = lostconfig.py3_init + "\n"
+    # extra_packages = json.loads(pipe_e.script.extra_packages)
+    pip_cmd, conda_cmd = gen_extra_install_cmd(pipe_e.script.extra_packages, lostconfig)
+    if pip_cmd is not None:
+        cmd += pip_cmd + '\n'
+    if conda_cmd is not None:
+        cmd += conda_cmd +'\n'
+    script_path = os.path.join(lostconfig.app_path, pipe_e.script.path)
     cmd += program + " " + script_path + " --idx " + str(pipe_e.idx) 
     return cmd
 
-@task
-def celery_exec_script(pipe_element_id):
+def exec_script_in_subprocess(pipe_element_id):
     try:
-        # Collect context information for celery task
-        logger = get_task_logger(__name__)
         lostconfig = LOSTConfig()
         dbm = DBMan(lostconfig)
         pipe_e = dbm.get_pipe_element(pipe_e_id=pipe_element_id)
-        worker = CurrentWorker(dbm, lostconfig)
-        if not worker.enough_resources(pipe_e.script):
-            logger.warning('Not enough resources! Rejected {} (PipeElement ID {})'.format(pipe_e.script.path, pipe_e.idx))
-            return
+        logger = logging
+        if lostconfig.worker_management == 'static':
+            worker = CurrentWorker(dbm, lostconfig)
+            if not worker.enough_resources(pipe_e.script):
+                # logger.warning('Not enough resources! Rejected {} (PipeElement ID {})'.format(pipe_e.script.path, pipe_e.idx))
+                raise Exception('Not enough resources')
         pipe_e.state = state.PipeElement.IN_PROGRESS
         dbm.save_obj(pipe_e)
-        file_man = FileMan(lostconfig)
+        file_man = AppFileMan(lostconfig)
         pipe = pipe_e.pipe
 
-        cmd = gen_run_cmd("pudb3", pipe_e, lostconfig)
-        debug_script_path = file_man.get_instance_path(pipe_e)
+        cmd = gen_run_cmd("pudb", pipe_e, lostconfig)
+        debug_script_path = file_man.get_debug_path(pipe_e)
         debug_script_path = os.path.join(debug_script_path, 'debug.sh')
         with open(debug_script_path, 'w') as sfile:
             sfile.write(cmd)
 
         cmd = gen_run_cmd("python3", pipe_e, lostconfig)
-        start_script_path = file_man.get_instance_path(pipe_e)
+        # file_man.create_debug_path(pipe_e)
+        start_script_path = file_man.get_debug_path(pipe_e)
         start_script_path = os.path.join(start_script_path, 'start.sh')
         with open(start_script_path, 'w') as sfile:
             sfile.write(cmd)
         p = subprocess.Popen('bash {}'.format(start_script_path), stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, shell=True)
         logger.info("{} ({}): Started script\n{}".format(pipe.name, pipe.idx, cmd))
-        worker.add_script(pipe_e, pipe_e.script)       
+        if lostconfig.worker_management == 'static':
+            worker.add_script(pipe_e, pipe_e.script)       
         out, err = p.communicate()
-        worker.remove_script(pipe_e, pipe_e.script)       
+        if lostconfig.worker_management == 'static':
+            worker.remove_script(pipe_e, pipe_e.script)       
         if p.returncode != 0:
             raise Exception(err.decode('utf-8'))
         logger.info('{} ({}): Executed script successful: {}'.format(pipe.name, 

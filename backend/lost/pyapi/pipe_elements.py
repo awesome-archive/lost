@@ -1,28 +1,32 @@
 import lost
 import os
+import fsspec
+import ast
 import pandas as pd
 from lost.db import dtype
 from lost.pyapi.pe_base import Element
 from lost.pyapi import script
+from lost.logic.file_man import FileMan
+from lost.logic.file_access import UserFileAccess
 
-class RawFile(Element):
+# class RawFile(Element):
 
-    def __init__(self, pe, dbm):
-        '''RawFile: Represents a file or folder in the filesystem.
+#     def __init__(self, pe, dbm):
+#         '''RawFile: Represents a file or folder in the filesystem.
 
-        Args:
-            pe (object): :class:`lost.db.model.PipeElement`
-            dbm (object): Database Management object.
+#         Args:
+#             pe (object): :class:`lost.db.model.PipeElement`
+#             dbm (object): Database Management object.
 
-        Note:
-            It is essential the same as a Datasource.
-        '''
-        super().__init__(pe, dbm)
+#         Note:
+#             It is essential the same as a Datasource.
+#         '''
+#         super().__init__(pe, dbm)
 
-    @property
-    def path(self):
-        '''str: Absolute path to file or folder'''
-        return self._fm.get_abs_path(self._pipe_element.datasource.raw_file_path)
+#     @property
+#     def path(self):
+#         '''str: Absolute path to file or folder'''
+#         return self._fm.get_abs_path(self._pipe_element.datasource.raw_file_path)
 
 class Datasource(Element):
 
@@ -34,11 +38,16 @@ class Datasource(Element):
             dbm (object): Database Management object.
         '''
         super().__init__(pe, dbm)
+        self.ufa = UserFileAccess(dbm, pe.pipe.manager, pe.datasource.fs)
 
     @property
     def path(self):
-        '''str: Absolute path to file or folder'''
-        return self._fm.get_abs_path(self._pipe_element.datasource.raw_file_path)
+        '''str: Relative path to file or folder'''
+        return self.pe.datasource.selected_path
+
+    def get_fs(self):
+        '''Get filesystem for this datasource'''
+        return self.ufa.get_fs(fs_id=self.pe.datasource.fs.idx)
 
 class AnnoTask(Element):
 
@@ -68,6 +77,19 @@ class AnnoTask(Element):
         lbl_df = pd.concat(lbl_list)
         return lbl_df
 
+    @property
+    def lbl_map(self):
+        '''dict: Map lbl_name to idx
+
+        Note:
+            All label names will be mapped to lower case!
+        '''
+        df = self.possible_label_df
+        my_map = dict()
+        def create_map(x):
+            my_map[x['name'].lower()] = x['idx'] 
+        df.apply(lambda x: create_map(x),axis=1)
+        return my_map
     
     @property
     def instructions(self):
@@ -175,7 +197,7 @@ class DataExport(Element):
         '''list of str: A list of absolute path to exported files'''
         path_list = []
         for export in self.data_exports:
-            path_list.append(self._fm.get_abs_path(export.file_path))
+            path_list.append(export.file_path)
         return path_list
 
     def to_dict(self):
@@ -189,7 +211,7 @@ class DataExport(Element):
             d_list.append(
                 {
                     'iteration': export.iteration,
-                    'file_path': self._fm.get_abs_path(export.file_path)
+                    'file_path': export.file_path
                 }
             )
         return d_list
@@ -218,7 +240,7 @@ class VisualOutput(Element):
         '''list of str: List of absolute paths to images.'''
         path_list = []
         for v_out in self.v_outs:
-            path_list.append(self._fm.get_abs_path(v_out.file_path))
+            path_list.append(v_out.file_path)
         return path_list
 
     @property
@@ -226,7 +248,7 @@ class VisualOutput(Element):
         '''list of str: list of html strings.'''
         path_list = []
         for v_out in self.v_outs:
-            path_list.append(self._fm.get_abs_path(v_out.file_path))
+            path_list.append(v_out.file_path)
         return path_list
 
     def to_dict(self):
@@ -241,7 +263,7 @@ class VisualOutput(Element):
             d_list.append(
                 {
                     'iteration': v_out.iteration,
-                    'img_path': self._fm.get_abs_path(v_out.img_path),
+                    'img_path': v_out.img_path,
                     'html_string': v_out.html_string
                 }
             )

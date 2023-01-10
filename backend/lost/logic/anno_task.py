@@ -4,6 +4,7 @@ from datetime import datetime
 from lost.pyapi import pipe_elements
 import pandas as pd
 from lost.logic import email
+from lost import settings
 
 def update_anno_task(dbm, anno_task_id, user_id=None):
     remaining = None
@@ -94,8 +95,8 @@ def set_finished(dbm, anno_task_id):
             return "not finished, remaining: " + str(progress['remainingAnnos'])
 
 def get_current_annotask(dbm, user):
-        if user.choosen_anno_task:
-            anno_task = user.choosen_anno_task
+        if len(user.choosen_anno_tasks) > 0:
+            anno_task = user.choosen_anno_tasks[0].anno_task
             return __get_at_info(dbm, anno_task, user.idx, True)
         return None
 
@@ -132,10 +133,10 @@ def __get_at_info(dbm, annotask, user_id, amount_per_label=False):
     at['instructions'] = annotask.instructions
     at['createdAt'] = None
     if annotask.timestamp:
-        at['createdAt'] = annotask.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        at['createdAt'] = annotask.timestamp.strftime(settings.STRF_TIME)
     at['lastActivity'] = None
     if annotask.last_activity:
-        at['lastActivity'] = annotask.last_activity.strftime("%Y-%m-%d %H:%M:%S")
+        at['lastActivity'] = annotask.last_activity.strftime(settings.STRF_TIME)
     at['lastAnnotator'] = "N/A"
     if annotask.last_annotator:
         at['lastAnnotator'] = annotask.last_annotator.user_name
@@ -209,6 +210,11 @@ def has_annotation(dbm, anno_task_id):
         return True
     else: return False
 
+def has_annotation_in_iteration(dbm, anno_task_id, iteration):
+    if dbm.count_annos(anno_task_id, iteration) > 0:
+        return True
+    else: return False
+        
 def __get_seconds_per_anno(dbm, pipeelement, anno_type, user_id=None):
     mean_time = dbm.mean_anno_time(pipeelement.anno_task.idx, user_id, anno_type)[0]
     if mean_time is not None:
@@ -224,7 +230,8 @@ def __get_amount_per_label(dbm, pipeelement, finished, anno_type):
         if result > 0: 
             dist.append({
                 'label': row['name'],
-                'amount': result
+                'amount': result,
+                'color': row['color']
             })
     return dist 
 

@@ -3,6 +3,7 @@ import json
 from lost.db import model
 from datetime import datetime
 import pandas as pd
+import numpy as np
 __author__ = "Jonas Jaeger"
 
 
@@ -15,9 +16,10 @@ class LabelTree(object):
         root_leaf (:class:`lost.db.model.LabelLeaf`): Root leaf of the tree.
         name (str): Name of a label tree.
         logger (logger): A logger.
+        group_id (int): Id of the group where the LabelTree belongs to.
     '''
 
-    def __init__(self, dbm, root_id=None, root_leaf=None, name=None, logger=None):
+    def __init__(self, dbm, root_id=None, root_leaf=None, name=None, logger=None, group_id=None):
         self.dbm = dbm # type: lost.db.access.DBMan
         self.root = None # type: lost.db.model.LabelLeaf
         self.tree = {}
@@ -33,7 +35,10 @@ class LabelTree(object):
             self.root = self.dbm.get_label_leaf(root_id)
             self.__collect_tree(self.root, self.tree)
         elif name is not None:
-            root_list = self.dbm.get_all_label_trees()
+            if group_id is None:
+                root_list = self.dbm.get_all_label_trees(global_only=True)
+            else:
+                root_list = self.dbm.get_all_label_trees(group_id=group_id, add_global=True)
             for leaf in root_list:
                 print(leaf.name)
             root = next(filter(lambda x: x.name==name, root_list), None)
@@ -86,10 +91,11 @@ class LabelTree(object):
                 The created root leaf or None if a root leaf with same
                 name is already present in database.
         '''
-        root_leafs = self.dbm.get_all_label_trees()
-        for leaf in root_leafs:
-            if name == leaf.name:
-                return None
+        root_leafs = self.dbm.get_all_label_trees(global_only=True)
+        if root_leafs is not None:
+            for leaf in root_leafs:
+                if name == leaf.name:
+                    return None
         self.root = model.LabelLeaf(name=name, 
             external_id=external_id, is_root=True)
         self.dbm.add(self.root)
@@ -203,8 +209,9 @@ class LabelTree(object):
         except KeyError:
             self.logger.info('\tNo timestamp provided.')
         try:
-            leaf.external_id = row['external_id']
-            self.logger.info('\texternal_id: {}'.format(leaf.external_id))
+            if not np.isnan(row['external_id']):
+                leaf.external_id = row['external_id']
+                self.logger.info('\texternal_id: {}'.format(leaf.external_id))
         except KeyError:
             self.logger.info('\tNo external_id provided.')
         try:
@@ -212,6 +219,11 @@ class LabelTree(object):
             self.logger.info('\tis_deleted: {}'.format(leaf.is_deleted))
         except KeyError:
             self.logger.info('\tNo is_deleted provided.')
+        try:
+            leaf.color = row['color']
+            self.logger.info('\tcolor: {}'.format(leaf.color))
+        except KeyError:
+            self.logger.info('\tNo color provided.')
 
     def __create_childs_from_df(self, child_dict, parent, parent_row):
         '''Create child leafs from a df.

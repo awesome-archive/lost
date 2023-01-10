@@ -1,7 +1,7 @@
 from lost.db import model
-from celery.utils.log import get_task_logger
-from celery import task
-from lost.logic.config import LOSTConfig
+# from celery.utils.log import get_task_logger
+# from celery import task
+from lostconfig import LOSTConfig
 from lost.db.access import DBMan
 from datetime import datetime, timedelta
 import json
@@ -34,20 +34,19 @@ def init_worker_on_startup():
     dbm.close_session()
     
 
-@task
 def send_life_sign():
-    logger = get_task_logger(__name__)
+    # logger = get_task_logger(__name__)
     lostconfig = LOSTConfig()
     dbm = DBMan(lostconfig)
     worker = dbm.get_worker(lostconfig.worker_name)
     if worker is None:
         register_worker(dbm, lostconfig)
-        logger.info('Registered worker: {}'.format(lostconfig.worker_name))
+        # logger.info('Registered worker: {}'.format(lostconfig.worker_name))
     else:
         worker.timestamp = datetime.utcnow()
         dbm.add(worker)
         dbm.commit()
-        logger.info('Sent lifesign: {}'.format(worker.worker_name))
+        #logger.info('Sent lifesign: {}'.format(worker.worker_name))
     dbm.close_session()
     
 
@@ -137,7 +136,10 @@ class CurrentWorker(object):
             scripts = json.loads(self.worker.in_progress)
         else:
             return
-        scripts.pop(str(pipe_e.idx))
+        try:
+            scripts.pop(str(pipe_e.idx))
+        except:
+            print('Could not find pipe_element id to remove script from worker!')
         self.worker.in_progress = json.dumps(scripts)
         if self.worker.resources:
             if 'lock_all' in json.loads(script.resources):

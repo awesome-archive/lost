@@ -6,7 +6,6 @@ from sqlalchemy import or_
 from lost.db import model, state, dtype
 import os
 
-CONNECTOR = "mysql+mysqldb"
 def convert_connection_str(lostconfig):
     '''Convert connection string from config format to sqlalchemy format.
 
@@ -18,7 +17,7 @@ def convert_connection_str(lostconfig):
         str: *mysql+mysqldb://user:pwd@server_ip:port/database*
     '''
     #out = CONNECTOR + "://" + lostconfig.lost_db_user + ":" + lostconfig.lost_db_pwd + "@" + lostconfig.lost_db_ip + "/" + lostconfig.lost_db_name
-    out = CONNECTOR + "://" + lostconfig.lost_db_user + ":" + lostconfig.lost_db_pwd + "@" + lostconfig.lost_db_ip +":"+ lostconfig.lost_db_port + "/" + lostconfig.lost_db_name
+    out = lostconfig.db_connector + "://" + lostconfig.lost_db_user + ":" + lostconfig.lost_db_pwd + "@" + lostconfig.lost_db_ip +":"+ lostconfig.lost_db_port + "/" + lostconfig.lost_db_name
     return out
 
 class DBMan(object):
@@ -140,7 +139,7 @@ class DBMan(object):
             return self.session.query(model.Pipe)\
                     .filter(model.Pipe.pipe_template_id==pipe_template_id).first()
         else:
-            raise Exception("db_access.get_pipw: Need to specify one of the arguments!")
+            raise Exception("db_access.get_pipe: Need to specify one of the arguments!")
 
     def get_all_pipes(self):
         '''Get all pipes in project
@@ -173,12 +172,23 @@ class DBMan(object):
         return self.session.query(model.Pipe)\
             .filter((model.Pipe.group_id.in_(group_ids) &  (model.Pipe.state!=state.Pipe.DELETED) )).all()
                     
-    def get_all_pipeline_templates(self):
+    def get_all_pipeline_templates(self, group_id=None, global_only=False, add_global=False):
         '''Get all PipeTemplate objects in db.
 
         Returns:
             list: :class:`.project.PipeTemplate`
         '''
+        if group_id:
+            if add_global:
+                return self.session.query(model.PipeTemplate)\
+                    .filter(or_(model.PipeTemplate.group_id==group_id, model.PipeTemplate.group_id == None)).all()
+            else:
+                return self.session.query(model.PipeTemplate)\
+                    .filter(model.PipeTemplate.group_id==group_id).all()
+        if global_only:
+            return self.session.query(model.PipeTemplate)\
+                .filter(model.PipeTemplate.group_id==None).all()
+
         return self.session.query(model.PipeTemplate).all()
 
     def get_pipe_template(self, pipe_template_id=None):
@@ -189,6 +199,15 @@ class DBMan(object):
         '''
         return self.session.query(model.PipeTemplate)\
             .filter(model.PipeTemplate.idx==pipe_template_id).first()
+
+    def get_pipe_template_by_pipe_project(self, pipe_project_name):
+        '''Get PipeTemplates by pipe_project name
+
+        Returns:
+            list: List of PipeTemplates
+        '''
+        return self.session.query(model.PipeTemplate)\
+            .filter(model.PipeTemplate.pipe_project==pipe_project_name).all()
 
     def get_script(self, script_id=None, name=None, file_name=None):
         '''Get a script object from database.
@@ -262,6 +281,12 @@ class DBMan(object):
         return self.session.query(model.ImageAnno)\
             .filter(model.ImageAnno.anno_task_id==anno_task_id).all()
 
+    def get_image_annotations_by_ids(self, anno_task_id, user_id, ids):
+        ''' Get list of image annotation by it's ids
+        '''
+        return self.session.query(model.ImageAnno)\
+            .filter(model.ImageAnno.anno_task_id==anno_task_id, model.ImageAnno.user_id==user_id, model.ImageAnno.idx.in_(ids)).all()
+
     def get_image_annotations_by_state(self, anno_task_id, state, user_id, amount):
         ''' Get all Image Anno by annotask, state and user_id
         '''
@@ -303,12 +328,14 @@ class DBMan(object):
         return self.session.query(model.ImageAnno)\
             .filter((model.ImageAnno.anno_task_id==anno_task_id)\
                     & ((model.ImageAnno.state == state.Anno.LOCKED)\
+                    | (model.ImageAnno.state == state.Anno.LABELED_LOCKED)\
                        | (model.ImageAnno.state == state.Anno.LOCKED_PRIORITY))).all()
 
     def get_locked_two_d_annos(self, anno_task_id):
         return self.session.query(model.TwoDAnno)\
             .filter((model.TwoDAnno.anno_task_id==anno_task_id)\
                     & ((model.TwoDAnno.state == state.Anno.LOCKED)\
+                    | (model.TwoDAnno.state == state.Anno.LABELED_LOCKED)\
                        | (model.TwoDAnno.state == state.Anno.LOCKED_PRIORITY))).all()
 
     def get_resultlinks_pe_n(self, pe_n_id):
@@ -385,6 +412,12 @@ class DBMan(object):
         return self.session.query(model.DataExport)\
         .filter(model.DataExport.result_id==result_id).all()
 
+    def get_data_export(self, de_id):
+        ''' Get data_export by id
+        '''
+        return self.session.query(model.DataExport)\
+        .filter(model.DataExport.idx==de_id).first()
+
     def get_visual_outputs(self, result_id):
         ''' Get visual_output by result_id
         '''
@@ -411,7 +444,7 @@ class DBMan(object):
          %(anno_task_id, state.Anno.LABELED, state.Anno.LABELED_LOCKED)
         return self.session.execute(sql).first()
 
-    def count_all_image_annos(self, anno_task_id, iteration):
+    def count_all_image_annos(self, anno_task_id, iteration=0):
         ''' Count the all image annotation of an annotation task
         '''
         return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
@@ -422,6 +455,12 @@ class DBMan(object):
         '''
         return self.session.query(model.ImageAnno)\
         .filter(model.ImageAnno.iteration==iteration, model.ImageAnno.anno_task_id==anno_task_id).all()
+    
+    def get_all_image_annos(self, anno_task_id):
+        ''' Get all image annotation of an annotation task
+        '''
+        return self.session.query(model.ImageAnno)\
+        .filter(model.ImageAnno.anno_task_id==anno_task_id).all()
 
     def get_user(self, user_id):
         ''' Get User by its id
@@ -452,7 +491,7 @@ class DBMan(object):
     def get_next_unlocked_sia_anno(self, anno_task_id, iteration):
         ''' Get next sia annotation of an anno_task
         '''
-        return self.session.query(model.ImageAnno).filter(model.ImageAnno.anno_task_id==anno_task_id, \
+        return self.session.query(model.ImageAnno).with_for_update().filter(model.ImageAnno.anno_task_id==anno_task_id, \
                                                        model.ImageAnno.state==state.Anno.UNLOCKED, \
                                                        model.ImageAnno.iteration==iteration).order_by(model.ImageAnno.idx.asc()).first()
 
@@ -481,6 +520,11 @@ class DBMan(object):
         '''
         return self.session.query(model.TwoDAnno).filter(model.TwoDAnno.img_anno_id==img_anno_id,\
                                                             model.TwoDAnno.iteration==iteration).all()
+
+    def get_lonely_two_d_annos(self):
+        ''' Get all two_d annotation that are not assigned to an image
+        '''
+        return self.session.query(model.TwoDAnno).filter(model.TwoDAnno.img_anno_id==None).all()
 
     def get_previous_sia_anno(self, anno_task_id, user_id, img_anno_id, iteration):
         ''' Get a previous image annotation by current annotation id
@@ -549,10 +593,22 @@ class DBMan(object):
          %(anno_task_id, iteration, user_id)
         return self.session.execute(sql).first()
     
-    def get_all_label_trees(self):
+    def get_all_label_trees(self, group_id=None, global_only=False, add_global=False):
         '''Get all label trees in lost'''
-        return self.session.query(model.LabelLeaf)\
-            .filter(model.LabelLeaf.is_root == True).all()
+        if group_id:
+            if add_global:
+                return self.session.query(model.LabelLeaf)\
+                    .filter(model.LabelLeaf.is_root == True, \
+                            or_(model.LabelLeaf.group_id==group_id, model.LabelLeaf.group_id == None)).all()
+            else:
+                return self.session.query(model.LabelLeaf)\
+                    .filter(model.LabelLeaf.is_root == True, \
+                            model.LabelLeaf.group_id==group_id).all()
+        if global_only:
+            return self.session.query(model.LabelLeaf)\
+                .filter(model.LabelLeaf.is_root == True, \
+                        model.LabelLeaf.group_id==None).all()
+
 
     def get_available_users(self):
         ''' Get all available users
@@ -581,11 +637,15 @@ class DBMan(object):
         '''
         return self.session.query(model.Datasource).all()
 
-    def count_annos(self, anno_task_id):
+    def count_annos(self, anno_task_id, iteration=None):
         '''count all annos with specific anno_task_id
         '''
-        return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
-        .filter(model.ImageAnno.anno_task_id == anno_task_id).first()[0]
+        if iteration:
+            return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
+                .filter(model.ImageAnno.anno_task_id == anno_task_id, model.ImageAnno.iteration == iteration).first()[0]
+        else:    
+            return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
+                .filter(model.ImageAnno.anno_task_id == anno_task_id).first()[0]
     
 
     def get_two_d_annotations_by_state(self, anno_task_id, state, user_id, amount):
@@ -641,6 +701,20 @@ class DBMan(object):
         else:
             raise Exception('Need to specify one of the method parameters')
     
+    def get_two_d_annotations_by_ids(self, anno_task_id, user_id, ids):
+        ''' Get list of two_d annotation by it's ids
+        '''
+        return self.session.query(model.TwoDAnno)\
+            .filter(model.TwoDAnno.anno_task_id==anno_task_id, model.TwoDAnno.user_id==user_id, model.TwoDAnno.idx.in_(ids)).all()
+
+    def get_example_annotation_by_ll_id(self, label_leaf_id):
+        ''' Get list of two_d annotation by label leaf id
+        '''
+        return self.session.query(model.TwoDAnno).join(model.Label)\
+            .filter(model.Label.two_d_anno_id == model.TwoDAnno.idx,
+                    model.Label.label_leaf_id == label_leaf_id,
+                    model.TwoDAnno.is_example==True).all()
+
     def find_user_by_email(self, email):
         return self.session.query(model.User).filter(model.User.email==email).first()
     
@@ -651,7 +725,7 @@ class DBMan(object):
         return self.session.query(model.User).filter(model.User.idx==user_id).first()
 
     def get_user_roles(self, user_id):
-        return self.session.query(model.UserRoles).filter(model.UserRoles.user_id==user_id).all()
+        return self.session.query(model.UserRoles).filter(model.UserRoles.user_id==user_id).order_by(model.UserRoles.role_id.asc()).all()
 
     def get_role(self, role_id):
         return self.session.query(model.Role).filter(model.Role.idx==role_id).first()
@@ -685,10 +759,10 @@ class DBMan(object):
         if not user_id:
             user_id_query = ''
         if anno_type == 'imageBased':
-            sql = "SELECT AVG(`anno_time`) FROM `image_anno` WHERE {} anno_task_id={} AND anno_time IS NOT NULL".format(user_id_query, anno_task_id)
+            sql = "SELECT AVG(anno_time) FROM image_anno WHERE {} anno_task_id={} AND anno_time IS NOT NULL".format(user_id_query, anno_task_id)
             return self.session.execute(sql).first()
         else:
-            sql = "SELECT AVG(`anno_time`) FROM `two_d_anno` WHERE {} anno_task_id={} AND anno_time IS NOT NULL".format(user_id_query, anno_task_id)
+            sql = "SELECT AVG(anno_time) FROM two_d_anno WHERE {} anno_task_id={} AND anno_time IS NOT NULL".format(user_id_query, anno_task_id)
             return self.session.execute(sql).first()
 
     def get_worker(self, worker_name=None):
@@ -706,6 +780,76 @@ class DBMan(object):
             return self.session.query(model.Worker)\
                 .filter(model.Worker.worker_name==worker_name).first()
 
+    def get_user_default_fs(self, user_idx):
+        '''Get user default filesystem 
+
+        Args:
+            user_idx (int): Id of the user who own this default filesystem
+        
+        Retruns:
+            `model.FileSystem` object: If one arg was given.
+        '''
+        return self.session.query(model.FileSystem)\
+            .filter(model.FileSystem.user_default_id==user_idx).first()
+                
+    def get_fs_deleted_also(self, name=None, group_id=None, fs_id=None):
+        '''Get all filesystem entries from database including deleted fs
+
+        Args:
+            name (str): Get filesystem by name.
+            group_id (int): GroupID for Group or User
+        
+        Retruns:
+            list of `model.FileSystem`: If no arg or group_id was given.
+            `model.FileSystem` object: If one arg was given.
+        '''
+        if name is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.name==name).first()
+        elif group_id is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.group_id==group_id).all()
+        elif fs_id is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.idx==fs_id).first()
+        else:
+            return self.session.query(model.FileSystem).all()
+
+    def get_fs(self, name=None, group_id=None, fs_id=None):
+        '''Get filesystem entries from database
+
+        Args:
+            name (str): Get filesystem by name.
+            group_id (int): GroupID for Group or User
+        
+        Retruns:
+            list of `model.FileSystem`: If no arg or group_id was given.
+            `model.FileSystem` object: If one arg was given.
+        '''
+        if name is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.deleted==False)\
+                .filter(model.FileSystem.name==name).first()
+        elif group_id is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.deleted==False)\
+                .filter(model.FileSystem.group_id==group_id).all()
+        elif fs_id is not None:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.idx==fs_id).first()
+        else:
+            return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.deleted==False).all()
+    
+    def get_public_fs(self):
+        '''Get all public available filesystem entries
+
+        Retruns:
+            list of `model.FileSystem`: All public filesystem entries.
+        '''
+        return self.session.query(model.FileSystem)\
+                .filter(model.FileSystem.group_id==None).all()
+
     def get_worker_and_lock(self, worker_name):
         '''Get an worker object and lock for update in database.
 
@@ -721,10 +865,10 @@ class DBMan(object):
     
     def get_amount_per_label(self, anno_task_id, label_leaf_id, anno_type):
         if anno_type == 'imageBased':
-            sql = "SELECT COUNT(`idx`) FROM `label` WHERE `label_leaf_id`={} AND `img_anno_id` IN (SELECT `idx` FROM `image_anno` WHERE `anno_task_id`={})".format(label_leaf_id, anno_task_id)
+            sql = "SELECT COUNT(idx) FROM label WHERE label_leaf_id={} AND img_anno_id IN (SELECT idx FROM image_anno WHERE anno_task_id={})".format(label_leaf_id, anno_task_id)
             return self.session.execute(sql).first()
         else:
-            sql = "SELECT COUNT(`idx`) FROM `label` WHERE `label_leaf_id`={} AND `two_d_anno_id` IN (SELECT `idx` FROM `two_d_anno` WHERE `anno_task_id`={})".format(label_leaf_id, anno_task_id)
+            sql = "SELECT COUNT(idx) FROM label WHERE label_leaf_id={} AND two_d_anno_id IN (SELECT idx FROM two_d_anno WHERE anno_task_id={})".format(label_leaf_id, anno_task_id)
             return self.session.execute(sql).first()
 
     def get_script_errors(self, pipe_id):
@@ -732,3 +876,350 @@ class DBMan(object):
                                                             model.PipeElement.dtype==dtype.PipeElement.SCRIPT,\
                                                             model.PipeElement.state==state.PipeElement.SCRIPT_ERROR,\
                                                             model.PipeElement.error_reported==False)
+    
+    def get_sia_review_first(self, anno_task_id, iteration=None):
+        ''' Get next sia annotation of an anno_task
+        '''
+        if iteration is not None:
+            return self.session.query(model.ImageAnno).filter(model.ImageAnno.anno_task_id==anno_task_id, \
+                                                           model.ImageAnno.iteration==iteration).order_by(model.ImageAnno.idx.asc()).first()
+        else:
+            return self.session.query(model.ImageAnno).filter(model.ImageAnno.anno_task_id==anno_task_id).order_by(model.ImageAnno.idx.asc()).first()
+
+
+    def get_sia_review_next(self, anno_task_id, img_anno_id, iteration=None):
+        ''' Get next sia annotation of an anno_task
+        '''
+        if iteration is not None:
+            return self.session.query(model.ImageAnno).filter(model.ImageAnno.anno_task_id==anno_task_id, \
+                                                        model.ImageAnno.idx > img_anno_id, \
+                                                        model.ImageAnno.iteration==iteration).first()
+        else:
+            return self.session.query(model.ImageAnno).filter(model.ImageAnno.anno_task_id==anno_task_id, \
+                                                        model.ImageAnno.idx > img_anno_id).first()
+
+    def get_sia_review_prev(self, anno_task_id, img_anno_id, iteration=None):
+        ''' Get a previous image annotation by current annotation id
+        '''
+        if iteration is not None:
+            sql = "SELECT * FROM image_anno WHERE iteration=%d AND anno_task_id=%d AND idx=(SELECT max(idx)\
+            FROM image_anno WHERE idx<%d)"\
+            %(iteration, anno_task_id, img_anno_id)
+        else:
+            sql = "SELECT * FROM image_anno WHERE anno_task_id=%d AND idx=(SELECT max(idx) FROM image_anno WHERE idx<%d)"\
+            %(anno_task_id, img_anno_id)
+        img_anno = self.session.execute(sql).first()
+        if img_anno:
+            return self.session.query(model.ImageAnno).filter(model.ImageAnno.idx==img_anno.idx).first()
+        else:
+            return None
+    
+    def count_two_d_annos_per_label_by_pe(self, pipe_element_id, user_id=None, iteration=None, date_from=None, date_to=None, exclude_current_iteration=False):
+        user_id_str = ""
+        if user_id:
+            user_id_str ='AND two_d_anno.user_id = {}'.format(user_id)
+        iteration_str = ""
+        if iteration:
+            iteration_str ='AND pipe_element.iteration = {}'.format(iteration)
+            if user_id_str != "":
+                iteration_str ='AND pipe_element.iteration = {}'.format(iteration)
+        between_str = ""
+        if date_from and date_to:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(date_from, date_to)
+            if user_id_str != "" or iteration_str != "":
+                between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(date_from, date_to)
+
+        exclude_current_iteration_str = ""
+        if exclude_current_iteration:
+            exclude_current_iteration_str = 'AND two_d_anno.iteration != pipe_element.iteration'
+
+        sql = "SELECT label.label_leaf_id, label_leaf.name, COUNT(label.idx) AS num_items \
+                FROM label INNER JOIN two_d_anno ON two_d_anno.idx = label.two_d_anno_id \
+                INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                INNER JOIN label_leaf ON label_leaf.idx = label.label_leaf_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                WHERE anno_task.pipe_element_id = {} \
+                {} {} {} {} GROUP BY label.label_leaf_id".format(pipe_element_id, user_id_str, iteration_str, between_str, exclude_current_iteration_str)
+        return self.session.execute(sql)
+    
+    def count_two_d_annos_per_day(self, pipe_element_id, user_id=None, iteration=None, date_from=None, date_to=None, exclude_current_iteration=False):
+        user_id_str = ""
+        if user_id:
+            user_id_str ='AND two_d_anno.user_id = {}'.format(user_id)
+        iteration_str = ""
+        if iteration:
+            iteration_str ='AND pipe_element.iteration = {}'.format(iteration)
+            if user_id_str != "":
+                iteration_str ='AND pipe_element.iteration = {}'.format(iteration)
+        between_str = ""
+        if date_from and date_to:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(date_from, date_to)
+            if user_id_str != "" or iteration_str != "":
+                between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(date_from, date_to)
+
+        exclude_current_iteration_str = ""
+        if exclude_current_iteration:
+            exclude_current_iteration_str = 'AND two_d_anno.iteration != pipe_element.iteration'
+
+        sql = "SELECT COUNT(two_d_anno.idx), DAY(two_d_anno.timestamp), MONTH(two_d_anno.timestamp), YEAR(two_d_anno.timestamp) \
+                FROM two_d_anno INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id\
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                WHERE anno_task.pipe_element_id = {} {} {}\
+                GROUP BY YEAR(two_d_anno.timestamp), MONTH(two_d_anno.timestamp), DAY(two_d_anno.timestamp)".format(pipe_element_id, between_str, exclude_current_iteration_str)
+
+        return self.session.execute(sql)
+    
+    def get_project_config(self, key=None):
+        '''Get all :class:`model.Config` objects in LOST.
+
+        Args:
+            key (str): Get project config by key
+
+        Returns:
+            list: A list of :class:`model.Config` objects
+            Config object: A single config object
+        '''
+        if key is None:
+            return self.session.query(model.Config).filter(model.Config.is_user_specific==False).all()
+        else:
+            return self.session.query(model.Config)\
+                .filter(model.Config.key == key, model.Config.is_user_specific==False).first()
+
+    def get_number_twod_annos_in_time(self, user_id, start=None, end=None):
+        if start and end:
+            return self.session.query(sqlalchemy.func.count(model.TwoDAnno.idx))\
+            .filter(model.TwoDAnno.user_id == user_id, \
+                model.TwoDAnno.timestamp >= start, 
+                model.TwoDAnno.timestamp <= end)
+        else:
+            return self.session.query(sqlalchemy.func.count(model.TwoDAnno.idx))\
+            .filter(model.TwoDAnno.user_id == user_id)
+
+    def count_two_d_annos_per_label_by_user(self, user_id, start=None, end=None):
+        between_str = ""
+        if start and end:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(start, end)
+
+        sql = "SELECT label.label_leaf_id, label_leaf.name, label_leaf.color, COUNT(label.idx) AS num_items \
+                FROM label INNER JOIN two_d_anno ON two_d_anno.idx = label.two_d_anno_id \
+                INNER JOIN label_leaf ON label_leaf.idx = label.label_leaf_id \
+                WHERE two_d_anno.user_id = {} \
+                {} GROUP BY label.label_leaf_id".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+    def count_two_d_annos_per_type_by_user(self, user_id, start=None, end=None):
+        between_str = ""
+        if start and end:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(start, end)
+
+        sql = "SELECT two_d_anno.dtype, COUNT(two_d_anno.idx) AS num_items \
+                FROM two_d_anno WHERE two_d_anno.user_id = {} {} GROUP BY two_d_anno.dtype".format(user_id, between_str)
+        return self.session.execute(sql)
+     
+    def mean_anno_time_by_user(self, user_id, anno_type='twodBased', start=None, end=None):
+        between_str = ''
+        if anno_type == 'imageBased':
+            if start and end:
+                between_str ='AND timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+            sql = "SELECT AVG(anno_time) FROM image_anno WHERE user_id={} AND anno_time IS NOT NULL {}".format(user_id, between_str)
+            return self.session.execute(sql).first()
+        else:
+            if start and end:
+                between_str ='AND timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+            sql = "SELECT AVG(anno_time) FROM two_d_anno WHERE user_id={} AND anno_time IS NOT NULL  {}".format(user_id, between_str)
+            return self.session.execute(sql).first()
+    
+    def get_number_image_annos_in_time(self, user_id, start=None, end=None):
+        if start and end:
+            return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
+            .filter(model.ImageAnno.user_id == user_id, \
+                model.ImageAnno.state == state.Anno.LABELED, 
+                model.ImageAnno.timestamp >= start, 
+                model.ImageAnno.timestamp <= end)
+        else:
+            return self.session.query(sqlalchemy.func.count(model.ImageAnno.idx))\
+            .filter(model.ImageAnno.user_id == user_id, \
+                model.ImageAnno.state == state.Anno.LABELED)
+    
+
+    def mean_anno_time_by_user_grouped_by(self, user_id, start, end, group_by='day', anno_type='twodBased'):
+        between_str ='AND timestamp BETWEEN "{}" AND "{}" GROUP BY {}(timestamp)'.format(start, end, group_by)
+        if anno_type == 'imageBased':
+            sql = "SELECT AVG(anno_time) FROM image_anno WHERE user_id={} AND anno_time IS NOT NULL {}".format(user_id, between_str)
+            return self.session.execute(sql)
+        else:
+            sql = "SELECT AVG(anno_time) FROM two_d_anno WHERE user_id={} AND anno_time IS NOT NULL  {}".format(user_id, between_str)
+            return self.session.execute(sql)
+    
+
+    def get_number_twod_annos_in_time_group_by(self, user_id, start, end, group_by='day'):
+        between_str ='AND timestamp BETWEEN "{}" AND "{}" GROUP BY {}(timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(idx) FROM two_d_anno WHERE user_id={} AND anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+
+    def get_number_image_annos_in_time_group_by(self, user_id, start, end, group_by='day'):
+        between_str ='AND timestamp BETWEEN "{}" AND "{}" GROUP BY {}(timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(idx) FROM image_anno WHERE user_id={} AND anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+    def get_processed_anno_tasks_in_time(self, user_id, start, end, group_by='day'):
+        between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(image_anno.timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(DISTINCT(anno_task.idx)) FROM image_anno INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id WHERE \
+             image_anno.user_id={} AND image_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql) 
+
+    def count_all_anno_tasks_by_user(self, user_id):
+        sql = "SELECT COUNT(DISTINCT(anno_task.idx)) FROM image_anno INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id WHERE \
+             image_anno.user_id={} AND image_anno.anno_time IS NOT NULL".format(user_id)
+        return self.session.execute(sql) 
+    
+    def count_two_d_annos_by_designer_and_group_by_hour(self, user_id, start, end):
+        between_str ='AND two_d_anno.timestamp BETWEEN "{}" AND "{}" \
+                     GROUP BY YEAR(two_d_anno.timestamp), \
+                     MONTH(two_d_anno.timestamp), DAY(two_d_anno.timestamp), \
+                     HOUR(two_d_anno.timestamp)'.format(start, end)
+        sql = "SELECT DAY(two_d_anno.timestamp), MONTH(two_d_anno.timestamp), \
+                YEAR(two_d_anno.timestamp), HOUR(two_d_anno.timestamp), \
+                COUNT(two_d_anno.idx), AVG(two_d_anno.anno_time) \
+                FROM two_d_anno INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id\
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id = {} {}".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+    def get_processed_anno_tasks_in_time_by_designer(self, user_id, start, end, group_by='day'):
+        between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(image_anno.timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(DISTINCT(anno_task.idx)) FROM image_anno \
+             INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+             INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+             INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+             WHERE pipe.manager_id={} AND image_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+
+    def mean_anno_time_by_designer(self, user_id, anno_type='twodBased', start=None, end=None):
+        between_str = ''
+        if anno_type == 'imageBased':
+            if start and end:
+                between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+            sql = "SELECT AVG(image_anno.anno_time) FROM image_anno \
+                INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND image_ano.anno_time IS NOT NULL {}".format(user_id, between_str)
+            return self.session.execute(sql).first()
+        else:
+            if start and end:
+                between_str ='AND two_d_anno.timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+            sql = "SELECT AVG(two_d_anno.anno_time) FROM two_d_anno \
+                 INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                 INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                 INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                 WHERE pipe.manager_id={} AND two_d_anno.anno_time IS NOT NULL  {}".format(user_id, between_str)
+            return self.session.execute(sql).first()
+    
+    def mean_anno_time_by_designer_group_by(self, user_id, start, end, group_by='day', anno_type='twodBased'):
+        if anno_type == 'imageBased':
+            between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(image_anno.timestamp)'.format(start, end, group_by)
+            sql = "SELECT AVG(image_anno.anno_time) FROM image_anno \
+                INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND image_ano.anno_time IS NOT NULL {}".format(user_id, between_str)
+            return self.session.execute(sql)
+        else:
+            between_str ='AND two_d_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(two_d_anno.timestamp)'.format(start, end, group_by)
+            sql = "SELECT AVG(two_d_anno.anno_time) FROM two_d_anno \
+                 INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                 INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                 INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                 WHERE pipe.manager_id={} AND two_d_anno.anno_time IS NOT NULL  {}".format(user_id, between_str)
+            return self.session.execute(sql)
+    
+    def count_all_anno_tasks_by_designer(self, user_id):
+        sql = "SELECT COUNT(DISTINCT(anno_task.idx)) FROM image_anno \
+            INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+            INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+            INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+            WHERE pipe.manager_id={} AND image_anno.anno_time IS NOT NULL".format(user_id)
+        return self.session.execute(sql) 
+    
+    def count_two_d_annos_per_label_by_designer(self, user_id, start=None, end=None):
+        between_str = ""
+        if start and end:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(start, end)
+
+        sql = "SELECT label.label_leaf_id, label_leaf.name, label_leaf.color, COUNT(label.idx) AS num_items \
+                FROM label INNER JOIN two_d_anno ON two_d_anno.idx = label.two_d_anno_id \
+                INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                INNER JOIN label_leaf ON label_leaf.idx = label.label_leaf_id \
+                WHERE pipe.manager_id = {} \
+                {} GROUP BY label.label_leaf_id".format(user_id, between_str)
+        return self.session.execute(sql)
+
+    def count_two_d_annos_per_type_by_designer(self, user_id, start=None, end=None):
+        between_str = ""
+        if start and end:
+            between_str ='AND two_d_anno.timestamp BETWEEN STR_TO_DATE("{}","%Y-%m-%d") AND STR_TO_DATE("{}","%Y-%m-%d")'.format(start, end)
+
+        sql = "SELECT two_d_anno.dtype, COUNT(two_d_anno.idx) AS num_items \
+                FROM two_d_anno INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id = {} {} GROUP BY two_d_anno.dtype".format(user_id, between_str)
+        return self.session.execute(sql)
+
+    def get_number_image_annos_in_time_by_designer_group_by(self, user_id, start, end, group_by='day'):
+        between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(image_anno.timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(image_anno.idx) FROM image_anno INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND image_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+        
+    def get_number_image_annos_in_time_by_designer(self, user_id, start=None, end=None):
+        between_str = ''
+        if start and end:
+            between_str ='AND image_anno.timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+        sql = "SELECT COUNT(image_anno.idx) FROM image_anno INNER JOIN anno_task ON anno_task.idx = image_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND image_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+
+    def get_number_twod_annos_in_time_by_designer_group_by(self, user_id, start, end, group_by='day'):
+        between_str ='AND two_d_anno.timestamp BETWEEN "{}" AND "{}" GROUP BY {}(two_d_anno.timestamp)'.format(start, end, group_by)
+        sql = "SELECT COUNT(two_d_anno.idx) FROM two_d_anno INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND two_d_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+    def get_number_twod_annos_in_time_by_designer(self, user_id, start=None, end=None):
+        between_str = ''
+        if start and end:
+            between_str ='AND two_d_anno.timestamp BETWEEN "{}" AND "{}"'.format(start, end)
+        sql = "SELECT COUNT(two_d_anno.idx) FROM two_d_anno INNER JOIN anno_task ON anno_task.idx = two_d_anno.anno_task_id \
+                INNER JOIN pipe_element ON pipe_element.idx = anno_task.pipe_element_id \
+                INNER JOIN pipe ON pipe.idx = pipe_element.pipe_id \
+                WHERE pipe.manager_id={} AND two_d_anno.anno_time IS NOT NULL {}".format(user_id, between_str)
+        return self.session.execute(sql)
+    
+    def get_anno_task_export(self, anno_task_export_id=None, anno_task_id=None):
+        ''' Get anno_task_export by anno_task_export_id or anno_task_id
+        '''
+        if anno_task_export_id:
+            return self.session.query(model.AnnoTaskExport)\
+            .filter(model.AnnoTaskExport.idx==anno_task_export_id).first()
+        if anno_task_id:
+            return self.session.query(model.AnnoTaskExport)\
+            .filter(model.AnnoTaskExport.anno_task_id==anno_task_id).order_by(model.AnnoTaskExport.idx.desc()).all()
+
+
+    def count_pipelines_by_template_id(self, pipe_template_id):
+        ''' Count all pipelines belonging to a template_id
+        '''
+        return self.session.query(sqlalchemy.func.count(model.Pipe.idx))\
+        .filter(model.Pipe.pipe_template_id == pipe_template_id)

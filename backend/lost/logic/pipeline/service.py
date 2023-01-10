@@ -5,6 +5,9 @@ from lost.db import model, access, state, dtype
 from lost.logic.template import combine_arguments
 from lost.logic import file_man
 from lost.utils.dump import dump
+import flask
+from lost import settings
+
 __author__ = "Gereon Reus"
 
 ############################ start ################################
@@ -162,18 +165,20 @@ class PipeStarter(object):
         pe_id = self.pe_map.get(pe_n).idx
         datasource = model.Datasource()
         datasource.pipe_element_id = pe_id
-        if template_element['datasource']['type'] == 'dataset':
-            datasource.dtype = dtype.Datasource.DATASET
-            datasource.dataset_id = data_element['datasource']['datasetId']
-        elif template_element['datasource']['type'] == 'modelLeaf':
-            datasource.dtype = dtype.Datasource.MODEL_LEAF
-            datasource.model_leaf_id = data_element['datasource']['modelLeafId']
-        elif template_element['datasource']['type'] == 'rawFile':
-            datasource.dtype = dtype.Datasource.RAW_FILE
-            datasource.raw_file_path = os.path.join(file_man.MEDIA_ROOT_PATH, data_element['datasource']['rawFilePath'])
-        elif template_element['datasource']['type'] == 'pipeElement':
-            datasource.dtype = dtype.Datasource.PIPE_ELEMENT
-            datasource.pipe_element_id = data_element['datasource']['pipeElementId']
+        datasource.selected_path = data_element['datasource']['selectedPath']
+        datasource.fs_id = data_element['datasource']['fs_id']
+        # if template_element['datasource']['type'] == 'dataset':
+        #     datasource.dtype = dtype.Datasource.DATASET
+        #     datasource.dataset_id = data_element['datasource']['datasetId']
+        # elif template_element['datasource']['type'] == 'modelLeaf':
+        #     datasource.dtype = dtype.Datasource.MODEL_LEAF
+        #     datasource.model_leaf_id = data_element['datasource']['modelLeafId']
+        # elif template_element['datasource']['type'] == 'rawFile':
+        #     datasource.dtype = dtype.Datasource.RAW_FILE
+        #     datasource.raw_file_path = os.path.join(file_man.MEDIA_ROOT_PATH, data_element['datasource']['rawFilePath'])
+        # elif template_element['datasource']['type'] == 'pipeElement':
+        #     datasource.dtype = dtype.Datasource.PIPE_ELEMENT
+        #     datasource.pipe_element_id = data_element['datasource']['pipeElementId']
         return datasource
 
     def create_anno_task(self, pe_n):
@@ -187,10 +192,11 @@ class PipeStarter(object):
             anno_task.dtype = dtype.AnnoTask.MIA
         elif template_element['annoTask']['type'].lower() == "sia":
             anno_task.dtype = dtype.AnnoTask.SIA
-        anno_task.configuration = json.dumps(template_element['annoTask']['configuration'])
+        anno_task.configuration = json.dumps(data_element['annoTask']['configuration'])
         anno_task.name = data_element['annoTask']['name']
         anno_task.instructions = data_element['annoTask']['instructions']
         anno_task.group_id = data_element['annoTask']['workerId']
+        anno_task.timestamp = datetime.now()
         if data_element['annoTask']['workerId'] == -1:
             anno_task.group_id = None
         anno_task.state = state.AnnoTask.PENDING
@@ -265,7 +271,7 @@ def get_pipelines(db_man, group_ids, debug_mode=False):
         JSON with all meta info about the pipelines.
     '''
     
-    # dump(group_ids, "--- printing group_ids ---") 
+    # dump(group_ids, "--- printing group_ids ---")
     pipes = db_man.get_pipes(group_ids)
     result = __serialize_pipes(db_man, debug_mode, pipes)
     return result
@@ -294,7 +300,7 @@ def __serialize_pipes(db_man, debug_mode, pipes):
         pipe_json = {'id': pipe.idx,
                      'name': pipe.name,
                      'description': pipe.description,
-                     'date': pipe.timestamp.strftime("%b %d %Y %H:%M:%S"),
+                     'date': pipe.timestamp.strftime(settings.STRF_TIME),
                      'progress': progress,
                      'creatorName': creator_name,
                      'isDebug': pipe.is_debug_mode,
@@ -322,6 +328,7 @@ def get_running_pipe(db_man, identity, pipe_id, media_url):
     Returns:
         json content of running pipe
     '''
+    # self.logger.info('This is A test Message: {}'.format("HEy ho"))
     pipe = db_man.get_pipe(pipe_id)
     if pipe is None: #or pipe.state == state.Pipe.FINISHED
         error_msg = "Pipe with ID '"+ str(pipe_id) + "' does not exist."
@@ -357,11 +364,15 @@ def serialize_elements(db_man, pipe_serialize, pipe_id):
         elif pe.dtype == dtype.PipeElement.ANNO_TASK:
             anno_task = db_man.get_anno_task(pipe_element_id=pe.idx)
             # TODO: if all_users - will throw an error at this time
+            for r in db_man.count_all_image_annos(anno_task_id=anno_task.idx)[0]:
+                img_count = r
+            for r in db_man.count_image_remaining_annos(anno_task_id=anno_task.idx):
+                annotated_img_count = img_count - r
             anno_task_user_name = "All Users"
             if anno_task.group_id:
                 anno_task_user_name = anno_task.group.name
             leaves = db_man.get_all_required_label_leaves(anno_task.idx)
-            pipe_serialize.add_anno_task(pe, anno_task, anno_task_user_name, leaves)
+            pipe_serialize.add_anno_task(pe, anno_task, anno_task_user_name, leaves, img_count, annotated_img_count)
         
         ########## DATA EXPORT #############
         elif pe.dtype == dtype.PipeElement.DATA_EXPORT:
@@ -396,7 +407,7 @@ class PipeSerialize(object):
         self.pipe_json['description'] = pipe.description
         self.pipe_json['managerName'] = manager_name
         self.pipe_json['templateId'] = pipe.pipe_template_id
-        self.pipe_json['timestamp'] = pipe.timestamp.strftime("%b %d %Y %H:%M:%S")
+        self.pipe_json['timestamp'] = pipe.timestamp.strftime(settings.STRF_TIME)
         self.pipe_json['isDebug'] = pipe.is_debug_mode
         self.pipe_json['logfilePath'] = pipe.logfile_path
         self.pipe_json['progress'] = progress
@@ -404,6 +415,7 @@ class PipeSerialize(object):
 
     def append_pe_json(self, pe_json):
         self.pipe_json['elements'].append(pe_json)
+        
     def add_pe_info(self, pe, pe_json):
         pe_json['id'] = pe.idx
         pe_json['peN'] = pe.idx
@@ -431,20 +443,22 @@ class PipeSerialize(object):
         # create datasource json
         datasource_json = dict()
         # fill datasource with info
-        dump(datasource, "--- dump ---") 
+        # dump(datasource, "--- dump ---") 
         datasource_json['id'] = datasource.idx
-        if datasource.dtype == dtype.Datasource.DATASET:
-            datasource_json['type'] = "dataset"
-            datasource_json['dataset'] = self.__ds_dataset(datasource.dataset)
-        elif datasource.dtype == dtype.Datasource.MODEL_LEAF:
-            datasource_json['type'] = "modelLeaf"
-            datasource_json['modelLeaf'] = self.__ds_model_leaf(datasource.model_leaf)
-        elif datasource.dtype == dtype.Datasource.RAW_FILE:
-            datasource_json['type'] = "rawFile"
-            datasource_json['rawFilePath'] = datasource.raw_file_path
-        elif datasource.dtype == dtype.Datasource.PIPE_ELEMENT:
-            datasource_json['type'] = "pipeElement"
-            datasource_json['pipeElement'] = self.__ds_dataset(datasource.pipe_element_id)
+        datasource_json['rawFilePath'] = datasource.selected_path
+
+        # if datasource.dtype == dtype.Datasource.DATASET:
+        #     datasource_json['type'] = "dataset"
+        #     datasource_json['dataset'] = self.__ds_dataset(datasource.dataset)
+        # elif datasource.dtype == dtype.Datasource.MODEL_LEAF:
+        #     datasource_json['type'] = "modelLeaf"
+        #     datasource_json['modelLeaf'] = self.__ds_model_leaf(datasource.model_leaf)
+        # elif datasource.dtype == dtype.Datasource.RAW_FILE:
+        #     datasource_json['type'] = "rawFile"
+        #     datasource_json['rawFilePath'] = datasource.selected_path
+        # elif datasource.dtype == dtype.Datasource.PIPE_ELEMENT:
+        #     datasource_json['type'] = "pipeElement"
+        #     datasource_json['pipeElement'] = self.__ds_dataset(datasource.pipe_element_id)
 
         pe_json['datasource'] = datasource_json
         self.append_pe_json(pe_json)
@@ -503,7 +517,7 @@ class PipeSerialize(object):
         pe_json['script'] = script_json
         self.append_pe_json(pe_json)
 
-    def add_anno_task(self, pe, anno_task, anno_task_user_name, req_leaves):
+    def add_anno_task(self, pe, anno_task, anno_task_user_name, req_leaves, img_count, annotated_img_count):
 
         # create pipe element json
         pe_json = dict()
@@ -519,6 +533,8 @@ class PipeSerialize(object):
             anno_task_json['type'] = "sia"
         anno_task_json['userName'] = anno_task_user_name
         anno_task_json['progress'] = anno_task.progress
+        anno_task_json['imgCount'] = img_count
+        anno_task_json['annotatedImgCount'] = annotated_img_count
         anno_task_json['instructions'] = anno_task.instructions
         if anno_task.configuration:
             anno_task_json['configuration'] = json.loads(anno_task.configuration)
@@ -528,10 +544,11 @@ class PipeSerialize(object):
             leaf_json = dict()
             leaf_json['id'] = leaf.idx
             leaf_json['name'] = leaf.name
+            leaf_json['color'] = leaf.color
             anno_task_json['labelLeaves'].append(leaf_json)
-
         pe_json['annoTask'] = anno_task_json
         self.append_pe_json(pe_json)
+
     def add_data_export(self, pe, data_exports):
         # create pipe element json
         pe_json = dict()
@@ -539,14 +556,17 @@ class PipeSerialize(object):
         pe_json = self.add_pe_info(pe, pe_json)
         data_exports_json = list()
         for de in data_exports:
-                data_export_json = dict()
-                data_export_json['id'] = de.idx
-                data_export_json['iteration'] = de.iteration
-                data_export_json['file_path'] = de.file_path
-                data_export_json['result_id'] = de.result_id
-                data_exports_json.append(data_export_json)
+            data_export_json = dict()
+            data_export_json['id'] = de.idx
+            data_export_json['iteration'] = de.iteration
+            data_export_json['file_path'] = de.file_path
+            data_export_json['result_id'] = de.result_id
+            data_export_json['fs_id'] = de.fs_id
+            # raise Exception('Test {}'.format(de.fs_id))
+            data_exports_json.append(data_export_json)
         pe_json['dataExport'] = data_exports_json
         self.append_pe_json(pe_json)
+
     def add_visual_output(self, pe, visual_outputs):
         # create pipe element json
         pe_json = dict()
@@ -712,6 +732,18 @@ def pause(db_man, pipe_id):
                 return "success"
     return "error"
 
+def updateArguments(db_man, data):
+    '''Update Arguments
+    '''
+    data = json.loads(data)
+    if data['elementId'] is not None:
+        element = db_man.get_pipe_element(pipe_e_id=data['elementId'])
+        element.arguments = json.dumps(data['updatedArguments'])
+        db_man.save_obj(element)
+        if element is not None:
+            return "success"
+    return "error"
+
 def play(db_man, pipe_id):
     ''' play a pipe. 
     '''
@@ -720,7 +752,7 @@ def play(db_man, pipe_id):
         if pipe is not None:
             if pipe.state != state.Pipe.FINISHED and pipe.state != state.Pipe.PENDING:
                 pipe.state = state.Pipe.IN_PROGRESS
-                db_man.save_obj(pipe)
+                db_man.save_obj(pipe) 
                 return "success"
     return "error"
 ############################ utils ################################
